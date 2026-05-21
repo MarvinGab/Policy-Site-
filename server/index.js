@@ -7,16 +7,26 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 
+const NODE_ENV = process.env.NODE_ENV || "development";
+const IS_PRODUCTION = NODE_ENV === "production";
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SESSION_SECRET = process.env.SESSION_SECRET || "dev-session-secret";
+const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? null : "dev-session-secret");
 const PORT = Number(process.env.PORT || 5173);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash-lite";
-const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "text-embedding-004";
+const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-001";
+const DEMO_USER_ID = process.env.DEMO_USER_ID || (IS_PRODUCTION ? null : "hrdemo");
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || (IS_PRODUCTION ? null : "Policy@2025");
+const DEMO_LOGIN_ENABLED = Boolean(DEMO_USER_ID && DEMO_PASSWORD);
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment.");
+  process.exit(1);
+}
+
+if (!SESSION_SECRET) {
+  console.error("Missing SESSION_SECRET in environment (required in production).");
   process.exit(1);
 }
 
@@ -32,6 +42,10 @@ const upload = multer({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+if (IS_PRODUCTION) {
+  app.set("trust proxy", 1);
+}
+
 app.use(
   session({
     secret: SESSION_SECRET,
@@ -40,7 +54,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: false,
+      secure: IS_PRODUCTION,
     },
   })
 );
@@ -180,57 +194,65 @@ app.post("/api/login", async (req, res) => {
     return res.status(400).send("User ID and password are required.");
   }
 
-  if (identifier === "hrdemo" && password === "Policy@2025") {
-    let demoCompanyId = null;
+  if (DEMO_LOGIN_ENABLED && identifier === DEMO_USER_ID && password === DEMO_PASSWORD) {
     try {
-      demoCompanyId = await ensureDemoCompany();
-    } catch (error) {
-      console.error("Demo company setup failed:", error);
-      return res.status(500).send("Login failed.");
-    }
-    const { data: demoUser, error: demoError } = await supabase
-      .from("user_profiles")
-      .select("id, employee_id, role, is_active, company_id")
-      .eq("employee_id", identifier)
-      .maybeSingle();
-
-    if (demoError) {
-      console.error("Demo login lookup failed:", demoError);
-      return res.status(500).send("Login failed.");
-    }
-
-    let user = demoUser;
-    if (!user) {
-      const passwordHash = await bcrypt.hash(password, 10);
-      const { data: created, error: createError } = await supabase
+      let demoCompanyId = await ensureDemoCompany();
+      const { data: demoUser, error: demoError } = await supabase
         .from("user_profiles")
-        .insert({
-          employee_id: identifier,
-          password_hash: passwordHash,
-          role: "admin",
-          is_active: true,
-          company_id: demoCompanyId,
-        })
         .select("id, employee_id, role, is_active, company_id")
-        .single();
+        .eq("employee_id", identifier)
+        .maybeSingle();
 
-      if (createError) {
-        console.error("Demo user create failed:", createError);
-        return res.status(500).send("Login failed.");
+      if (demoError) {
+        throw demoError;
       }
-      user = created;
-    }
 
-    if (user.is_active === false) {
-      return res.status(401).send("Invalid credentials.");
-    }
+      let user = demoUser;
+      if (!user) {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const { data: created, error: createError } = await supabase
+          .from("user_profiles")
+          .insert({
+            employee_id: identifier,
+            password_hash: passwordHash,
+            role: "admin",
+            is_active: true,
+            company_id: demoCompanyId,
+          })
+          .select("id, employee_id, role, is_active, company_id")
+          .single();
 
-    const companyId = user.company_id || demoCompanyId;
-    if (!user.company_id && companyId) {
-      await supabase.from("user_profiles").update({ company_id: companyId }).eq("id", user.id);
+        if (createError) {
+          throw createError;
+        }
+        user = created;
+      }
+
+      if (user.is_active === false) {
+        return res.status(401).send("Invalid credentials.");
+      }
+
+      const companyId = user.company_id || demoCompanyId;
+      if (!user.company_id && companyId) {
+        await supabase.from("user_profiles").update({ company_id: companyId }).eq("id", user.id);
+      }
+      req.session.user = { id: user.id, employeeId: user.employee_id, role: user.role, companyId };
+      return res.json({ role: user.role, employeeId: user.employee_id, companyId });
+    } catch (error) {
+      console.error("Demo login database unavailable, using offline session:", error);
+      req.session.user = {
+        id: "demo-local",
+        employeeId: "hrdemo",
+        role: "admin",
+        companyId: null,
+      };
+      return res.json({
+        role: "admin",
+        employeeId: "hrdemo",
+        companyId: null,
+        offline: true,
+      });
     }
-    req.session.user = { id: user.id, employeeId: user.employee_id, role: user.role, companyId };
-    return res.json({ role: user.role, employeeId: user.employee_id, companyId });
   }
 
   const { data, error } = await supabase
@@ -319,10 +341,14 @@ app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) =>
     const extracted = sanitizeText(await extractTextFromFile(file));
     if (extracted) {
       const chunks = chunkText(extracted);
-      const embeddings = [];
-      for (const chunk of chunks) {
-        const embedding = await embedText(chunk);
-        embeddings.push({ chunk, embedding });
+      const EMBED_CONCURRENCY = 5;
+      const embeddings = new Array(chunks.length);
+      for (let i = 0; i < chunks.length; i += EMBED_CONCURRENCY) {
+        const batch = chunks.slice(i, i + EMBED_CONCURRENCY);
+        const results = await Promise.all(batch.map((chunk) => embedText(chunk)));
+        results.forEach((embedding, j) => {
+          embeddings[i + j] = { chunk: batch[j], embedding };
+        });
       }
       const payload = embeddings.map(({ chunk, embedding }) => ({
         policy_id: policyId,
@@ -379,52 +405,6 @@ app.get("/api/policy-documents", requireAuth, async (req, res) => {
   );
 
   return res.json(signedFiles);
-});
-
-app.delete("/api/policy-documents", requireAdmin, async (req, res) => {
-  const { policyId, filePath } = req.body || {};
-  if (!policyId || !filePath) {
-    return res.status(400).send("Missing policy ID or file path.");
-  }
-
-  const { data: documentRow } = await supabase
-    .from("policy_documents")
-    .select("id")
-    .eq("policy_id", policyId)
-    .eq("file_path", filePath)
-    .eq("company_id", req.session.user.companyId)
-    .maybeSingle();
-
-  if (documentRow?.id) {
-    const { error: chunkDeleteError } = await supabase
-      .from("policy_chunks")
-      .delete()
-      .eq("document_id", documentRow.id);
-    if (chunkDeleteError) {
-      console.error("Chunk delete failed:", chunkDeleteError);
-      return res.status(500).send("Failed to delete file.");
-    }
-  }
-
-  const { error: storageError } = await supabase.storage.from("policy-files").remove([filePath]);
-  if (storageError) {
-    console.error("Storage delete failed:", storageError);
-    return res.status(500).send(storageError.message || "Failed to delete file.");
-  }
-
-  const { error: deleteError } = await supabase
-    .from("policy_documents")
-    .delete()
-    .eq("policy_id", policyId)
-    .eq("file_path", filePath)
-    .eq("company_id", req.session.user.companyId);
-
-  if (deleteError) {
-    console.error("Document delete failed:", deleteError);
-    return res.status(500).send(deleteError.message || "Failed to delete file record.");
-  }
-
-  return res.json({ success: true });
 });
 
 app.post("/api/policy-documents/delete", requireAdmin, async (req, res) => {
