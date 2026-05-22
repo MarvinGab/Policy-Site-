@@ -7,24 +7,18 @@
         Secure sign-in, audit-ready logs, and clear access boundaries keep
         your policy portal protected.
       </p>
-      <div class="login-hint">
-        <span>Sample ID:</span>
-        <strong>hrdemo</strong>
-        <span>Sample Password:</span>
-        <strong>Policy@2025</strong>
-      </div>
     </div>
     <form class="login-form" id="login-form">
       <div class="login-seal" aria-hidden="true"></div>
       <label>
-        <span>Employee ID</span>
-        <input type="text" name="userid" placeholder="Enter ID" required />
+        <span>Email</span>
+        <input type="email" name="email" placeholder="you@company.com" required autocomplete="email" />
       </label>
       <label>
         <span>Password</span>
-        <input type="password" name="password" placeholder="Enter password" required />
+        <input type="password" name="password" placeholder="Enter password" required autocomplete="current-password" />
       </label>
-      <button class="btn primary" type="submit">Employee Login</button>
+      <button class="btn primary" type="submit">Login</button>
       <p class="login-error" id="login-error" role="alert"></p>
     </form>
   </div>

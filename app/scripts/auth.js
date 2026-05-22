@@ -4,45 +4,39 @@ export const initAuth = () => {
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const formData = new FormData(loginForm);
-      const userid = String(formData.get("userid") || "").trim();
+      const email = String(formData.get("email") || formData.get("userid") || "").trim().toLowerCase();
       const password = String(formData.get("password") || "");
       const error = document.getElementById("login-error");
-
-      if (error) {
-        error.textContent = "";
-      }
+      if (error) error.textContent = "";
 
       try {
         const response = await fetch("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userid, password }),
+          body: JSON.stringify({ email, password }),
           credentials: "include",
         });
 
         if (!response.ok) {
           const message = await response.text();
-          if (error) {
-            error.textContent = message || "Login failed. Check your credentials.";
-          }
+          if (error) error.textContent = message || "Login failed. Check your credentials.";
           return;
         }
 
         const data = await response.json();
-        const role = data?.role;
-        window.location.href = role === "admin" ? "policies.html" : "policies.html";
+        // Super admin → organizations list. (Org admin / employee flows come in Phase 5.)
+        window.location.href = data?.role === "super_admin" ? "orgs.html" : "orgs.html";
       } catch (err) {
-        if (error) {
-          error.textContent = "Login failed. Try again.";
-        }
+        if (error) error.textContent = "Login failed. Try again.";
         console.error("Login failed:", err);
       }
     });
   }
 
-  const isPolicyPage = document.body?.dataset.page === "policies";
-  const isAdminPage = document.body?.dataset.page === "policy-admin";
-  if (isPolicyPage || isAdminPage) {
+  // Pages behind the gate verify the session client-side and bounce to login if cookie is gone.
+  const protectedPages = new Set(["orgs", "policies", "policy-admin"]);
+  const page = document.body?.dataset.page;
+  if (protectedPages.has(page)) {
     fetch("/api/session", { credentials: "include" })
       .then(async (response) => {
         if (!response.ok) {
@@ -55,13 +49,6 @@ export const initAuth = () => {
         if (!data) return;
         document.body.dataset.role = data.role || "employee";
         window.dispatchEvent(new CustomEvent("role-ready"));
-        const addPolicyBtn = document.querySelector(".add-policy-btn");
-        if (data.role !== "admin" && addPolicyBtn) {
-          addPolicyBtn.setAttribute("hidden", "");
-        }
-        if (isAdminPage && data.role !== "admin") {
-          window.location.replace("policies.html");
-        }
       })
       .catch((err) => {
         console.error("Session check failed:", err);

@@ -1,5 +1,5 @@
 import "dotenv/config";
-import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import express from "express";
 import session from "express-session";
 import multer from "multer";
@@ -16,9 +16,8 @@ const PORT = Number(process.env.PORT || 5173);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash-lite";
 const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-001";
-const DEMO_USER_ID = process.env.DEMO_USER_ID || (IS_PRODUCTION ? null : "hrdemo");
-const DEMO_PASSWORD = process.env.DEMO_PASSWORD || (IS_PRODUCTION ? null : "Policy@2025");
-const DEMO_LOGIN_ENABLED = Boolean(DEMO_USER_ID && DEMO_PASSWORD);
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment.");
@@ -27,6 +26,11 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 if (!SESSION_SECRET) {
   console.error("Missing SESSION_SECRET in environment (required in production).");
+  process.exit(1);
+}
+
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  console.error("Missing ADMIN_EMAIL or ADMIN_PASSWORD in environment.");
   process.exit(1);
 }
 
@@ -150,23 +154,14 @@ const chatWithGemini = async (prompt) => {
   return result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 };
 
-const ensureDemoCompany = async () => {
-  const { data: existing, error: lookupError } = await supabase
-    .from("companies")
-    .select("id")
-    .eq("slug", "demo-company")
-    .maybeSingle();
-  if (lookupError) throw lookupError;
-  if (existing) return existing.id;
+const slugify = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "org";
 
-  const { data: created, error: createError } = await supabase
-    .from("companies")
-    .insert({ name: "Demo Company", slug: "demo-company" })
-    .select("id")
-    .single();
-  if (createError) throw createError;
-  return created.id;
-};
+const generateAccessToken = () => crypto.randomBytes(18).toString("base64url");
 
 const extractTextFromFile = async (file) => {
   if (!file) return "";
@@ -188,100 +183,82 @@ const extractTextFromFile = async (file) => {
 };
 
 app.post("/api/login", async (req, res) => {
-  const { userid, password } = req.body || {};
-  const identifier = String(userid || "").trim();
+  const { email, userid, password } = req.body || {};
+  const identifier = String(email || userid || "").trim().toLowerCase();
   if (!identifier || !password) {
-    return res.status(400).send("User ID and password are required.");
+    return res.status(400).send("Email and password are required.");
   }
+  if (identifier !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    return res.status(401).send("Invalid credentials.");
+  }
+  req.session.user = {
+    id: "admin",
+    email: ADMIN_EMAIL,
+    role: "super_admin",
+    companyId: null,
+  };
+  return res.json({ role: "super_admin", email: ADMIN_EMAIL });
+});
 
-  if (DEMO_LOGIN_ENABLED && identifier === DEMO_USER_ID && password === DEMO_PASSWORD) {
-    try {
-      let demoCompanyId = await ensureDemoCompany();
-      const { data: demoUser, error: demoError } = await supabase
-        .from("user_profiles")
-        .select("id, employee_id, role, is_active, company_id")
-        .eq("employee_id", identifier)
-        .maybeSingle();
+// --- Super admin: organization management ---
 
-      if (demoError) {
-        throw demoError;
-      }
+const requireSuperAdmin = (req, res, next) => {
+  if (!req.session?.user) return res.status(401).send("Not authenticated.");
+  if (req.session.user.role !== "super_admin") return res.status(403).send("Super admin only.");
+  return next();
+};
 
-      let user = demoUser;
-      if (!user) {
-        const passwordHash = await bcrypt.hash(password, 10);
-        const { data: created, error: createError } = await supabase
-          .from("user_profiles")
-          .insert({
-            employee_id: identifier,
-            password_hash: passwordHash,
-            role: "admin",
-            is_active: true,
-            company_id: demoCompanyId,
-          })
-          .select("id, employee_id, role, is_active, company_id")
-          .single();
+app.get("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_token, created_at")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("List orgs failed:", error);
+    return res.status(500).send("Failed to load organizations.");
+  }
+  return res.json(data || []);
+});
 
-        if (createError) {
-          throw createError;
-        }
-        user = created;
-      }
+app.post("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
+  const name = sanitizeText(req.body?.name || "");
+  if (!name) return res.status(400).send("Organization name is required.");
 
-      if (user.is_active === false) {
-        return res.status(401).send("Invalid credentials.");
-      }
-
-      const companyId = user.company_id || demoCompanyId;
-      if (!user.company_id && companyId) {
-        await supabase.from("user_profiles").update({ company_id: companyId }).eq("id", user.id);
-      }
-      req.session.user = { id: user.id, employeeId: user.employee_id, role: user.role, companyId };
-      return res.json({ role: user.role, employeeId: user.employee_id, companyId });
-    } catch (error) {
-      console.error("Demo login database unavailable, using offline session:", error);
-      req.session.user = {
-        id: "demo-local",
-        employeeId: "hrdemo",
-        role: "admin",
-        companyId: null,
-      };
-      return res.json({
-        role: "admin",
-        employeeId: "hrdemo",
-        companyId: null,
-        offline: true,
-      });
-    }
+  // Ensure slug is unique.
+  const baseSlug = slugify(name);
+  let slug = baseSlug;
+  let suffix = 1;
+  while (true) {
+    const { data: existing } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (!existing) break;
+    suffix += 1;
+    slug = `${baseSlug}-${suffix}`;
   }
 
   const { data, error } = await supabase
-    .from("user_profiles")
-    .select("id, employee_id, role, password_hash, is_active, company_id")
-    .eq("employee_id", identifier)
-    .maybeSingle();
-
+    .from("companies")
+    .insert({ name, slug, access_token: generateAccessToken() })
+    .select("id, name, slug, access_token, created_at")
+    .single();
   if (error) {
-    console.error("Login lookup failed:", error);
-    return res.status(500).send("Login failed.");
+    console.error("Create org failed:", error);
+    return res.status(500).send(error.message || "Failed to create organization.");
   }
+  return res.status(201).json(data);
+});
 
-  if (!data || data.is_active === false) {
-    return res.status(401).send("Invalid credentials.");
+app.delete("/api/admin/orgs/:id", requireSuperAdmin, async (req, res) => {
+  const orgId = req.params.id;
+  const { error } = await supabase.from("companies").delete().eq("id", orgId);
+  if (error) {
+    console.error("Delete org failed:", error);
+    return res.status(500).send(error.message || "Failed to delete organization.");
   }
-
-  const isValid = await bcrypt.compare(password, data.password_hash);
-  if (!isValid) {
-    return res.status(401).send("Invalid credentials.");
-  }
-
-  req.session.user = {
-    id: data.id,
-    employeeId: data.employee_id,
-    role: data.role,
-    companyId: data.company_id,
-  };
-  return res.json({ role: data.role, employeeId: data.employee_id, companyId: data.company_id });
+  return res.json({ ok: true });
 });
 
 app.get("/api/session", (req, res) => {

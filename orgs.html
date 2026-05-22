@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ZaRoHR | Organizations</title>
+    <link rel="stylesheet" href="app/styles/base.css" />
+    <link rel="stylesheet" href="app/styles/header.css" />
+    <link rel="stylesheet" href="app/styles/buttons.css" />
+    <link rel="stylesheet" href="app/styles/hero.css" />
+    <link rel="stylesheet" href="app/styles/dashboard.css" />
+    <link rel="stylesheet" href="app/styles/modules.css" />
+    <link rel="stylesheet" href="app/styles/animations.css" />
+    <link rel="stylesheet" href="app/styles/themes.css" />
+    <style>
+      .orgs-wrap {
+        padding: 32px 6vw 80px;
+        max-width: 1240px;
+        margin: 0 auto;
+      }
+
+      .orgs-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+      }
+
+      .orgs-head h1 {
+        margin: 0;
+        font-size: clamp(1.6rem, 2.6vw, 2rem);
+      }
+
+      .orgs-head .subtitle {
+        margin: 4px 0 0;
+        color: var(--ink-muted);
+        font-size: 0.95rem;
+      }
+
+      .orgs-create {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .orgs-create input {
+        min-width: 240px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--outline);
+        background: var(--panel-strong);
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.9rem;
+      }
+
+      .orgs-create input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px rgba(63, 104, 255, 0.12);
+      }
+
+      .orgs-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+      }
+
+      .org-card {
+        background: var(--panel);
+        border: 1px solid var(--outline);
+        border-radius: 22px;
+        padding: 22px 22px 16px;
+        box-shadow: var(--shadow);
+        display: grid;
+        gap: 10px;
+        cursor: pointer;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        position: relative;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+      }
+
+      .org-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(63, 104, 255, 0.4);
+        box-shadow: 0 16px 32px rgba(18, 22, 36, 0.12);
+      }
+
+      .org-card h2 {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 600;
+      }
+
+      .org-card .meta {
+        font-size: 0.8rem;
+        color: var(--ink-muted);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .org-card .delete-org {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgba(185, 28, 28, 0.25);
+        background: transparent;
+        color: #b91c1c;
+        font-size: 0.72rem;
+        font-weight: 500;
+        padding: 4px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+        user-select: none;
+        opacity: 0;
+        transition: opacity 160ms ease, background 160ms ease;
+      }
+
+      .org-card:hover .delete-org,
+      .org-card:focus-within .delete-org {
+        opacity: 1;
+      }
+
+      .org-card .delete-org:hover {
+        background: rgba(185, 28, 28, 0.08);
+      }
+
+      .orgs-empty {
+        border-radius: 18px;
+        border: 1px dashed var(--outline);
+        background: var(--panel);
+        padding: 36px 24px;
+        text-align: center;
+        color: var(--ink-muted);
+      }
+
+      .orgs-empty strong {
+        display: block;
+        color: var(--ink);
+        font-size: 1.05rem;
+        margin-bottom: 8px;
+      }
+
+      .orgs-error {
+        margin: 0;
+        font-size: 0.85rem;
+        color: #b91c1c;
+        min-height: 1.2em;
+      }
+    </style>
+  </head>
+  <body data-page="orgs">
+    <div data-include="app/components/header.html"></div>
+
+    <main class="orgs-wrap">
+      <header class="orgs-head">
+        <div>
+          <h1>Organizations</h1>
+          <p class="subtitle">Each organization gets its own policies, recipients, and chatbot.</p>
+        </div>
+        <form class="orgs-create" id="org-create">
+          <input type="text" name="name" placeholder="New organization name" required />
+          <button class="btn primary" type="submit">Create</button>
+        </form>
+      </header>
+      <p class="orgs-error" id="org-error" role="alert"></p>
+      <div id="orgs-grid">
+        <div class="orgs-empty">Loading…</div>
+      </div>
+    </main>
+
+    <script type="module" src="app/scripts/main.js"></script>
+    <script type="module" src="app/scripts/orgs.js"></script>
+  </body>
+</html>

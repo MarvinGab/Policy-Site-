@@ -26,6 +26,12 @@ const hydrateHeader = (page) => {
   const headerCtas = document.querySelector('[data-slot="header-ctas"]');
   if (!headerLinks || !headerCtas) return;
 
+  if (page === "orgs") {
+    headerLinks.innerHTML = "";
+    headerCtas.innerHTML = `<button class="btn ghost" id="logout">Logout</button>`;
+    return;
+  }
+
   if (page === "policies") {
     headerLinks.innerHTML = `
       <div class="header-policy">
@@ -33,7 +39,7 @@ const hydrateHeader = (page) => {
         <span class="policy-total" data-policy-total></span>
       </div>
     `;
-    headerCtas.innerHTML = `<button class="btn ghost" id="logout">Logout</button>`;
+    headerCtas.innerHTML = `<a class="btn ghost" href="orgs.html">All organizations</a><button class="btn ghost" id="logout">Logout</button>`;
     return;
   }
 
@@ -67,8 +73,7 @@ const hydrateHeader = (page) => {
     <a class="link" href="#login">Support</a>
   `;
   headerCtas.innerHTML = `
-    <button class="btn ghost" data-scroll="login">Employee Login</button>
-    <button class="btn primary" data-scroll="login">Download Handbook</button>
+    <button class="btn ghost" data-scroll="login">Login</button>
   `;
 };
 
