@@ -1,3 +1,4 @@
+html[data-theme="sky"],
 body[data-theme="sky"] {
   color-scheme: only light;
   --ink: #16213a;
@@ -15,6 +16,7 @@ body[data-theme="sky"] {
   background: var(--page-bg);
 }
 
+html[data-theme="sand"],
 body[data-theme="sand"] {
   color-scheme: only light;
   --ink: #2b2419;
@@ -32,6 +34,7 @@ body[data-theme="sand"] {
   background: var(--page-bg);
 }
 
+html[data-theme="mint"],
 body[data-theme="mint"] {
   color-scheme: only light;
   --ink: #1b2a26;
@@ -49,6 +52,7 @@ body[data-theme="mint"] {
   background: var(--page-bg);
 }
 
+html[data-theme="midnight"],
 body[data-theme="midnight"] {
   color-scheme: only dark;
   --ink: #e6edf7;
@@ -66,6 +70,7 @@ body[data-theme="midnight"] {
   background: var(--page-bg);
 }
 
+html[data-theme="carbon"],
 body[data-theme="carbon"] {
   color-scheme: only dark;
   --ink: #edf0f5;

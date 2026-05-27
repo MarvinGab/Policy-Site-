@@ -4,9 +4,42 @@
   padding: 48px 8vw 110px;
 }
 
+.org-back-link {
+  position: fixed;
+  left: 32px;
+  bottom: 32px;
+  z-index: 91;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  background: var(--panel-strong);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: 0 12px 24px rgba(18, 22, 36, 0.14);
+  transition: transform 200ms ease, background 200ms ease, box-shadow 200ms ease;
+}
+
+.org-back-link span {
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: -4px;
+}
+
+.org-back-link:hover {
+  background: var(--panel);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 30px rgba(18, 22, 36, 0.18);
+}
+
 body[data-page="policies"] .policy-dashboard {
-  gap: 8px;
-  padding-top: 18px;
+  gap: 0;
+  padding-top: 0;
 }
 
 .dashboard-head {
@@ -18,46 +51,63 @@ body[data-page="policies"] .policy-dashboard {
 
 .add-policy-btn {
   position: fixed;
-  right: 32px;
-  bottom: 32px;
+  left: 32px;
+  bottom: 96px;
   z-index: 90;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 54px;
-  height: 54px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border-radius: 999px;
-  border: 0;
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--outline);
+  background: var(--panel-strong);
+  color: var(--ink);
   text-decoration: none;
   font-weight: 600;
   font-size: 0.9rem;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 12px 24px rgba(18, 22, 36, 0.16);
   transition: transform 220ms ease, box-shadow 220ms ease, background 220ms ease, filter 220ms ease;
 }
 
 .theme-btn {
+  bottom: 320px;
+}
+
+.manage-modules-btn {
+  bottom: 264px;
+}
+
+.admins-admin-btn {
+  bottom: 208px;
+}
+
+.people-admin-btn,
+.hrms-admin-btn {
+  bottom: 152px;
+}
+
+.org-settings-btn {
   bottom: 96px;
-  background: var(--panel-strong);
-  border: 1px solid var(--outline);
-  color: var(--ink);
+}
+
+[data-access-mode-show] {
+  display: none;
+}
+
+[data-access-mode-show].is-mode-visible {
+  display: inline-flex;
 }
 
 .theme-btn:hover {
   filter: brightness(1.04);
 }
 
-.theme-icon {
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
 .theme-panel {
   position: fixed;
-  right: 32px;
-  bottom: 160px;
+  left: 32px;
+  bottom: 376px;
   width: 220px;
   background: var(--panel);
   border: 1px solid var(--outline);
@@ -146,11 +196,21 @@ body[data-page="policies"] .policy-dashboard {
   line-height: 1;
 }
 
+.add-policy-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .add-policy-text {
   position: absolute;
-  right: calc(100% + 10px);
+  left: calc(100% + 10px);
   top: 50%;
-  transform: translateY(-50%) translateX(6px);
+  transform: translateY(-50%) translateX(-6px);
   background: var(--panel-strong);
   border: 1px solid var(--outline);
   border-radius: 999px;
@@ -199,12 +259,174 @@ body[data-page="policies"] .policy-dashboard {
   justify-content: flex-start;
 }
 
+/* Lives in the header now (see main.js hydrateHeader for "policies"). */
+.rail-search-field {
+  position: relative;
+  width: 180px;
+  max-width: 180px;
+}
+
+.rail-search-field::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  transform: translateY(-50%);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316213a' stroke-opacity='0.55' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>");
+  background-repeat: no-repeat;
+  background-size: contain;
+  pointer-events: none;
+}
+
+.rail-search-input {
+  width: 100%;
+  padding: 7px 14px 7px 34px;
+  border-radius: 999px;
+  border: 1px solid var(--outline);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  box-shadow: 0 4px 12px rgba(18, 22, 36, 0.06);
+}
+
+@media (max-width: 640px) {
+  .rail-search-field {
+    max-width: 100%;
+  }
+}
+
+.rail-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Suggestions dropdown — frosted glass panel. The translucent panel sits
+   over whatever rail content is behind it and lets the page tint show
+   through, which keeps the focus on the search rather than introducing a
+   second solid surface. */
+.rail-search-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: color-mix(in srgb, var(--panel) 65%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid color-mix(in srgb, var(--outline) 70%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(18, 22, 36, 0.22);
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+  min-width: 260px;
+}
+
+/* Fallback for browsers without color-mix support — still semi-transparent. */
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+  .rail-search-suggestions {
+    background: rgba(255, 255, 255, 0.55);
+    border-color: rgba(28, 36, 56, 0.16);
+  }
+}
+
+.rail-search-suggestion {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.rail-search-suggestion .suggestion-icon {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.rail-search-suggestion .suggestion-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rail-search-suggestion .suggestion-label {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-search-suggestion .suggestion-meta {
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-search-suggestion:hover,
+.rail-search-suggestion.is-active {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.rail-search-suggestion mark {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rail-search-suggestions-empty {
+  padding: 12px 10px;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* Brief flash when a module is jumped to from the search dropdown */
+.policy-module-card.is-flash {
+  animation: rail-card-flash 1.6s ease;
+}
+
+@keyframes rail-card-flash {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft); }
+  30%  { box-shadow: 0 0 0 6px var(--accent-soft); }
+  100% { box-shadow: 0 0 0 0 var(--accent-soft); }
+}
+
+.rail-no-results {
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  margin: 24px auto 0;
+}
+
+.policy-module-card.is-filtered-out {
+  display: none;
+}
+
+.policy-module-card.is-filter-policy-only .rail-item {
+  border-color: var(--accent);
+}
+
 .policy-rail {
   background: transparent;
-  border: 1px solid var(--outline);
-  border-radius: 26px;
+  border: none;
+  border-radius: 0;
   padding: 20px;
-  box-shadow: var(--shadow);
+  box-shadow: none;
   max-width: 1060px;
   width: 100%;
   position: sticky;
@@ -633,6 +855,44 @@ body[data-page="policies"] .policy-dashboard {
 
   .rail-list {
     grid-template-columns: 1fr;
+  }
+
+  /* Tighten the FAB column on phones — 6 buttons at 56px spacing eats the
+     bottom half of the screen otherwise. Shrink the buttons and the gap. */
+  .add-policy-btn,
+  .org-back-link {
+    width: 40px;
+    height: 40px;
+    left: 16px;
+    box-shadow: 0 8px 18px rgba(18, 22, 36, 0.18);
+  }
+
+  .org-back-link { bottom: 24px; }
+  .org-settings-btn { bottom: 76px; }
+  .people-admin-btn,
+  .hrms-admin-btn { bottom: 124px; }
+  .admins-admin-btn { bottom: 172px; }
+  .manage-modules-btn { bottom: 220px; }
+  .theme-btn { bottom: 268px; }
+
+  .theme-panel {
+    left: 16px;
+    bottom: 316px;
+  }
+
+  /* Tooltip labels rarely make sense on touch; hide them on small screens. */
+  .add-policy-text {
+    display: none;
+  }
+
+  .rail-search {
+    padding: 0 12px;
+  }
+
+  /* Make the search field full-width and the suggestions panel match — gives
+     a proper command-palette feel on phone screens. */
+  .rail-search-field {
+    max-width: none;
   }
 }
 .policy-rail,

@@ -13,6 +13,7 @@ body[data-page="policy-admin"] {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .admin-controls {
@@ -21,6 +22,69 @@ body[data-page="policy-admin"] {
   gap: 12px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.admin-controls.is-hidden {
+  display: none;
+}
+
+.admin-controls:empty {
+  display: none;
+}
+
+.admin-controls.is-hidden .admin-tab {
+  display: none;
+}
+
+.admin-tabs {
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.admin-tab {
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font-weight: 700;
+  min-height: 32px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.admin-tab.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.admin-section {
+  display: none;
+  gap: 16px;
+}
+
+.admin-section.is-active {
+  display: grid;
+}
+
+
+.modules-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.modules-toolbar .admin-search {
+  margin-left: auto;
+}
+
+.modules-toolbar-add {
+  white-space: nowrap;
 }
 
 .admin-filters {
@@ -78,6 +142,7 @@ body[data-page="policy-admin"] {
   text-decoration: none;
   color: var(--ink);
   font-weight: 600;
+  min-height: 36px;
   padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid var(--outline);
@@ -88,6 +153,57 @@ body[data-page="policy-admin"] {
 .admin-grid {
   display: grid;
   gap: 24px;
+}
+
+.admin-create-module,
+.people-form,
+.people-upload,
+.email-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--outline);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.admin-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.admin-checkbox input {
+  accent-color: var(--accent);
+}
+
+.email-settings {
+  display: grid;
+  align-items: stretch;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.admin-textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  border-radius: 14px;
+  border: 1px solid rgba(28, 36, 56, 0.16);
+  padding: 10px 12px;
+  font: inherit;
+  background: var(--panel-strong);
+  color: var(--ink);
 }
 
 .admin-empty {
@@ -109,6 +225,15 @@ body[data-page="policy-admin"] {
   gap: 16px;
 }
 
+.admin-module:not(.is-open) {
+  gap: 0;
+}
+
+.admin-module:not(.is-open) .admin-add,
+.admin-module:not(.is-open) .admin-policy-list {
+  display: none;
+}
+
 .admin-module.has-files {
   border-color: var(--accent);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.16);
@@ -123,20 +248,71 @@ body[data-page="policy-admin"] {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  cursor: pointer;
+}
+
+.admin-module-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+
+.inline-rename-input {
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: var(--ink);
+  background: var(--panel-strong);
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  padding: 4px 10px;
+  min-width: 220px;
+  max-width: 100%;
+}
+
+.inline-rename-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.admin-policy.is-hidden-policy {
+  opacity: 0.55;
+}
+
+.admin-policy.is-hidden-policy .policy-name {
+  font-style: italic;
 }
 
 .admin-module-head h2 {
   font-size: 1.2rem;
-}
-
-.admin-add {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.admin-module.is-managing .admin-add {
+.module-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--outline);
+  background: var(--panel-strong);
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Visible whenever the module is open. The .admin-module:not(.is-open) rule
+   above hides it when collapsed. */
+.admin-add {
   display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .admin-module-actions {
@@ -158,8 +334,22 @@ body[data-page="policy-admin"] {
   background: rgba(63, 104, 255, 0.12);
   color: var(--accent);
   font-weight: 600;
+  min-height: 36px;
   padding: 8px 14px;
   cursor: pointer;
+}
+
+.admin-file-pick {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--ink-muted);
+  user-select: none;
+}
+
+.admin-file-pick:hover {
+  border-color: var(--accent);
+  color: var(--ink);
 }
 
 .admin-policy-list {
@@ -216,7 +406,8 @@ body[data-page="policy-admin"] {
   border: 1px solid var(--outline);
   background: var(--panel-strong);
   border-radius: 12px;
-  padding: 6px 10px;
+  min-height: 34px;
+  padding: 7px 10px;
   font-size: 0.8rem;
   cursor: pointer;
   min-width: 64px;
@@ -228,12 +419,48 @@ body[data-page="policy-admin"] {
 }
 
 .icon-btn.danger {
-  border-color: rgba(185, 28, 28, 0.2);
-  color: #b91c1c;
+  border-color: var(--danger-soft);
+  color: var(--danger);
 }
 
 .icon-btn.danger:hover {
-  border-color: rgba(185, 28, 28, 0.45);
+  border-color: rgba(167, 68, 68, 0.35);
+  background: var(--danger-soft);
+}
+
+/* Borderless single-character buttons (pencil rename, × delete). Reset the
+   box-y baseline of .icon-btn so only the glyph is visible. Native title
+   attribute gives the hover label. */
+.icon-btn.icon-only {
+  border: none;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  width: 28px;
+  height: 28px;
+  line-height: 1;
+  font-size: 1.1rem;
+  color: var(--ink-muted);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn.icon-only:hover {
+  color: var(--ink);
+  background: var(--panel-strong);
+  border: none;
+}
+
+.icon-btn.icon-only--danger {
+  color: var(--ink-muted);
+}
+
+.icon-btn.icon-only--danger:hover {
+  color: var(--danger);
+  background: transparent;
 }
 
 .policy-delete-btn {
@@ -242,6 +469,206 @@ body[data-page="policy-admin"] {
 
 .admin-module.is-managing .policy-delete-btn {
   display: inline-flex;
+}
+
+.policy-delete-x,
+.module-delete-x {
+  min-width: 34px;
+  width: 34px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.people-list {
+  display: grid;
+  gap: 10px;
+}
+
+.person-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--outline);
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.person-row div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.person-row span {
+  color: var(--ink-muted);
+}
+
+.person-pill {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 80px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  border: 1px solid var(--outline);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+
+.admin-mode-note {
+  margin: 0 0 8px;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.settings-form {
+  display: grid;
+  gap: 16px;
+  max-width: 640px;
+}
+
+.settings-fieldset {
+  border: 1px solid var(--outline);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: grid;
+  gap: 12px;
+  background: var(--panel);
+}
+
+.settings-fieldset legend {
+  padding: 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.settings-radio {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+  padding: 10px 12px;
+  border-radius: 12px;
+  transition: background 160ms ease;
+}
+
+.settings-radio:hover {
+  background: var(--panel-strong);
+}
+
+.settings-radio input[type="radio"] {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+
+.settings-radio span {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-radio strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.settings-radio em {
+  font-style: normal;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.hrms-access-panel {
+  display: grid;
+  gap: 18px;
+  background: var(--panel);
+  border: 1px solid var(--outline);
+  border-radius: 18px;
+  padding: 22px;
+  max-width: 900px;
+}
+
+.hrms-access-panel h2 {
+  font-size: 1.35rem;
+  margin: 0 0 6px;
+}
+
+.hrms-access-panel p {
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+.hrms-access-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hrms-launch-box {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--outline);
+  background: var(--panel-strong);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.hrms-launch-box code {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-radius: 10px;
+  background: rgba(18, 22, 36, 0.08);
+  color: var(--ink);
+  padding: 10px 12px;
+  font-size: 0.82rem;
+}
+
+.hrms-launch-box span {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.hrms-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.hrms-access-item {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--outline);
+  background: var(--panel-strong);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.hrms-access-item strong {
+  font-size: 0.9rem;
+}
+
+.hrms-access-item span {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+[data-mode-show]:not(.is-mode-visible) {
+  display: none !important;
+}
+
+[data-mode-show]:not(.is-mode-visible) * {
+  display: none !important;
 }
 
 .policy-files {
@@ -340,6 +767,47 @@ body[data-page="policy-admin"] {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.dialog .field {
+  display: grid;
+  gap: 6px;
+}
+
+.dialog .field label {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.dialog .field input[type="text"],
+.dialog .field input[type="email"] {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--outline);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.dialog .field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.dialog .dialog-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+  min-height: 1.1em;
+}
+
+.org-dialog {
+  width: min(460px, 92vw);
+  padding: 28px;
+  gap: 16px;
 }
 
 .viewer-backdrop {
@@ -450,5 +918,51 @@ body[data-page="policy-admin"] {
   .admin-policy {
     grid-template-columns: 1fr;
     align-items: flex-start;
+  }
+
+  .settings-grid,
+  .person-row,
+  .hrms-access-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Small screens — tighten the admin shell + per-row action layouts so
+   nothing overflows on a phone-width viewport. */
+@media (max-width: 640px) {
+  .policy-admin {
+    padding: 20px 4vw 80px;
+  }
+
+  .admin-head h1 {
+    font-size: 1.4rem;
+  }
+
+  .admin-tabs {
+    flex-wrap: wrap;
+  }
+
+  .modules-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modules-toolbar .admin-search,
+  .modules-toolbar-add {
+    width: 100%;
+    text-align: center;
+  }
+
+  .admin-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .person-row {
+    padding: 12px;
+  }
+
+  .org-dialog {
+    padding: 22px;
   }
 }

@@ -1,8 +1,14 @@
 <section class="admin-head">
   <div>
-    <h1>Manage modules &amp; policies.</h1>
+    <!-- Title is filled by main.js loadComponents based on the URL hash
+         before paint, so navigating to #people doesn't briefly show "Modules". -->
+    <h1 data-admin-title></h1>
   </div>
-  <div class="admin-controls">
+  <a class="admin-back" href="policies.html">Dashboard</a>
+</section>
+
+<section class="admin-section" data-admin-section="modules">
+  <div class="modules-toolbar">
     <div class="admin-filters" role="group" aria-label="Policy filters">
       <button class="admin-filter is-active" type="button" data-admin-filter="all">
         All <span class="filter-count" data-filter-count="all">0</span>
@@ -14,8 +20,157 @@
         Pending <span class="filter-count" data-filter-count="missing">0</span>
       </button>
     </div>
-    <a class="admin-back" href="policies.html">Back to modules</a>
+    <input
+      class="admin-input admin-search"
+      type="search"
+      data-admin-search
+      placeholder="Search policies…"
+      autocomplete="off"
+    />
+    <button class="admin-add-btn modules-toolbar-add" type="button" data-action="open-module-create">+ Add module</button>
   </div>
+  <section class="admin-grid" data-admin-grid></section>
 </section>
 
-<section class="admin-grid" data-admin-grid></section>
+<!-- New-module modal. Triggered by the toolbar "+ Add module" button. -->
+<div class="dialog-backdrop" id="module-create-modal" aria-hidden="true">
+  <form class="dialog org-dialog" data-module-create role="dialog" aria-modal="true" aria-labelledby="module-create-title">
+    <h2 class="dialog-title" id="module-create-title">Add module</h2>
+    <div class="field">
+      <label>Module name</label>
+      <input type="text" name="name" placeholder="e.g. Time off" autocomplete="off" required />
+    </div>
+    <label class="admin-input admin-file-pick">
+      <input type="file" accept="image/*" name="image" hidden data-module-image-input />
+      <span data-file-label-text>Choose tile image (optional)</span>
+    </label>
+    <p class="dialog-error" role="alert"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-action="cancel">Cancel</button>
+      <button type="submit" class="btn primary">Create module</button>
+    </div>
+  </form>
+</div>
+
+<section class="admin-section" data-admin-section="admins" data-super-admin-section>
+  <form class="people-form" data-admins-form>
+    <input class="admin-input" name="name" type="text" placeholder="Admin name" autocomplete="off" />
+    <input class="admin-input" name="email" type="email" placeholder="Admin email" autocomplete="off" required />
+    <label class="admin-checkbox">
+      <input type="checkbox" name="send_email" />
+      <span>Send invite email</span>
+    </label>
+    <button class="admin-add-btn" type="submit">Add admin account</button>
+  </form>
+  <section class="people-list" data-admins-list></section>
+</section>
+
+<section class="admin-section" data-admin-section="people" data-mode-show="standalone" data-super-admin-section>
+  <p class="admin-mode-note" data-people-mode-note></p>
+  <form class="people-form" data-people-form>
+    <input class="admin-input" name="email" type="email" placeholder="Email address" required />
+    <button class="admin-add-btn" type="submit">Add employee</button>
+  </form>
+  <div class="people-upload">
+    <input class="hidden-input" type="file" accept=".csv,text/csv" data-people-file />
+    <button class="icon-btn" type="button" data-action="people-upload">Upload CSV</button>
+    <span>CSV columns: email (one per line)</span>
+  </div>
+  <section class="people-list" data-people-list></section>
+</section>
+
+<section class="admin-section" data-admin-section="settings" data-super-admin-section>
+  <form class="settings-form" data-settings-form>
+    <fieldset class="settings-fieldset">
+      <legend>Access mode</legend>
+      <label class="settings-radio">
+        <input type="radio" name="access_mode" value="standalone" />
+        <span>
+          <strong>Standalone</strong>
+          <em>policies.zarohr owns users, passwords, invites, and email delivery.</em>
+        </span>
+      </label>
+      <label class="settings-radio">
+        <input type="radio" name="access_mode" value="hrms_link" />
+        <span>
+          <strong>HRMS Tile</strong>
+          <em>HRMS owns the entry point. People and SMTP are hidden; access should come through a signed launch.</em>
+        </span>
+      </label>
+    </fieldset>
+    <button class="admin-add-btn" type="submit">Save settings</button>
+  </form>
+</section>
+
+<section class="admin-section" data-admin-section="hrms" data-mode-show="hrms_link" data-super-admin-section>
+  <form class="hrms-access-panel" data-hrms-settings>
+    <div>
+      <h2>HRMS Tile Access</h2>
+      <p>Configure this organization once, then give the HRMS team the launch URL template and secret.</p>
+    </div>
+    <label class="settings-radio">
+      <input type="checkbox" name="enabled" />
+      <span>
+        <strong>Enable signed HRMS launch</strong>
+        <em>Only signed HRMS links can open this organization in iframe mode.</em>
+      </span>
+    </label>
+    <input
+      class="admin-input"
+      name="allowed_origin"
+      type="url"
+      placeholder="Allowed iframe origin, e.g. https://hrms.client.com"
+    />
+    <div class="hrms-launch-box">
+      <strong>Signed launch URL</strong>
+      <code data-hrms-launch-url>Loading launch URL...</code>
+      <span>HRMS should generate this fresh per employee and replace email/name/external_id/exp/signature.</span>
+    </div>
+    <div class="hrms-launch-box">
+      <strong>Launch secret</strong>
+      <code data-hrms-secret>Not generated yet.</code>
+      <span>Share this with the HRMS team once. Rotate it if exposed or lost.</span>
+    </div>
+    <div class="hrms-access-grid">
+      <div class="hrms-access-item">
+        <strong>Launch path</strong>
+        <span>/api/hrms/launch</span>
+      </div>
+      <div class="hrms-access-item">
+        <strong>Protection model</strong>
+        <span>Org slug + email + expiry + HMAC signature, then a policies.zarohr session.</span>
+      </div>
+      <div class="hrms-access-item">
+        <strong>Hidden in this mode</strong>
+        <span>People, SMTP, invites, and portal password management.</span>
+      </div>
+    </div>
+    <div class="dialog-actions hrms-actions">
+      <button class="btn ghost" type="button" data-action="copy-hrms-url">Copy URL</button>
+      <button class="btn ghost" type="button" data-action="copy-hrms-secret">Copy secret</button>
+      <button class="btn ghost" type="button" data-action="rotate-hrms-secret">Rotate secret</button>
+      <button class="admin-add-btn" type="submit">Save HRMS settings</button>
+    </div>
+    <div class="hrms-launch-box">
+      <strong>Integration test</strong>
+      <span data-hrms-test-result>Save settings, then use the generated sample URL to test launch.</span>
+      <button class="btn ghost" type="button" data-action="test-hrms-launch">Run test</button>
+    </div>
+  </form>
+</section>
+
+<section class="admin-section" data-admin-section="email" data-mode-show="standalone" data-super-admin-section>
+  <form class="email-settings" data-email-settings>
+    <div class="settings-grid">
+      <input class="admin-input" name="host" type="text" placeholder="SMTP host" />
+      <input class="admin-input" name="port" type="number" placeholder="Port" />
+      <input class="admin-input" name="username" type="text" placeholder="SMTP username" />
+      <input class="admin-input" name="password" type="password" placeholder="SMTP password" />
+      <input class="admin-input" name="from_email" type="email" placeholder="From email" />
+      <input class="admin-input" name="from_name" type="text" placeholder="From name" />
+    </div>
+    <input class="admin-input" name="subject" type="text" placeholder="Invite subject" />
+    <textarea class="admin-textarea" name="body" rows="6" placeholder="Invite draft"></textarea>
+    <button class="admin-add-btn" type="submit">Save email settings</button>
+  </form>
+</section>

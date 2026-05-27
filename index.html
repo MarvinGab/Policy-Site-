@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ZaRoHR | HR Policy Portal</title>
+    <title>policies.zarohr | HR Policy Portal</title>
+    <script src="app/scripts/theme-boot.js"></script>
     <link rel="stylesheet" href="app/styles/base.css" />
     <link rel="stylesheet" href="app/styles/header.css" />
     <link rel="stylesheet" href="app/styles/buttons.css" />
@@ -14,47 +15,44 @@
     <link rel="stylesheet" href="app/styles/themes.css" />
   </head>
   <body data-page="landing">
+    <div class="page-ambient" aria-hidden="true">
+      <span class="flow flow-1"></span>
+      <span class="flow flow-2"></span>
+      <span class="flow flow-3"></span>
+      <span class="flow flow-4"></span>
+      <span class="flow flow-5"></span>
+    </div>
     <div data-include="app/components/header.html"></div>
 
     <main>
       <div data-include="app/components/hero.html"></div>
 
-      <section class="metrics">
-        <div class="metric reveal">
-          <span class="metric-number" data-count="120">0</span>
-          <span class="metric-label">Policies tracked</span>
-        </div>
-        <div class="metric reveal">
-          <span class="metric-number" data-count="98">0</span>
-          <span class="metric-label">Compliance coverage</span>
-        </div>
-        <div class="metric reveal">
-          <span class="metric-number" data-count="24">0</span>
-          <span class="metric-label">Hour access</span>
-        </div>
-        <div class="metric reveal">
-          <span class="metric-number" data-count="7">0</span>
-          <span class="metric-label">Core modules</span>
-        </div>
-      </section>
-
       <section class="how" id="how">
         <div class="section-title reveal">
           <p class="eyebrow">HOW IT WORKS</p>
-          <h2>Built for calm, continuous compliance.</h2>
+          <h2>From policy chaos to audit&#8209;ready, in three moves.</h2>
         </div>
         <div class="how-grid">
           <article class="how-card reveal">
-            <h3>1. Centralize</h3>
-            <p>Bring every HR and compliance policy into one structured hub.</p>
+            <div class="how-card-head">
+              <span class="how-step">01</span>
+              <h3>Centralize</h3>
+            </div>
+            <p>One hub for every policy. No more &ldquo;which version is current?&rdquo;</p>
           </article>
           <article class="how-card reveal">
-            <h3>2. Communicate</h3>
-            <p>Publish updates instantly with visibility across departments.</p>
+            <div class="how-card-head">
+              <span class="how-step">02</span>
+              <h3>Distribute</h3>
+            </div>
+            <p>Roll out updates in minutes, not weeks. Everyone signs, you see who.</p>
           </article>
           <article class="how-card reveal">
-            <h3>3. Assure</h3>
-            <p>Track acknowledgment and stay prepared for audits.</p>
+            <div class="how-card-head">
+              <span class="how-step">03</span>
+              <h3>Prove</h3>
+            </div>
+            <p>Logs, signatures, and trails auditors actually accept.</p>
           </article>
         </div>
       </section>

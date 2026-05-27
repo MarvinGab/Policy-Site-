@@ -3,52 +3,62 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ZaRoHR | Organizations</title>
+    <title>policies.zarohr | Organizations</title>
+    <script src="app/scripts/theme-boot.js"></script>
     <link rel="stylesheet" href="app/styles/base.css" />
     <link rel="stylesheet" href="app/styles/header.css" />
     <link rel="stylesheet" href="app/styles/buttons.css" />
     <link rel="stylesheet" href="app/styles/hero.css" />
     <link rel="stylesheet" href="app/styles/dashboard.css" />
     <link rel="stylesheet" href="app/styles/modules.css" />
+    <link rel="stylesheet" href="app/styles/admin.css" />
     <link rel="stylesheet" href="app/styles/animations.css" />
     <link rel="stylesheet" href="app/styles/themes.css" />
     <style>
-      .orgs-wrap {
-        padding: 32px 6vw 80px;
+      /* Override base.css's main flex layout (meant for the landing hero). */
+      main.orgs-wrap {
+        display: block;
+        padding: 32px clamp(20px, 4vw, 40px) 80px;
         max-width: 1240px;
         margin: 0 auto;
+        gap: 0;
       }
 
-      .orgs-head {
+      /* --- Toolbar (shown when at least one org exists) --- */
+      .orgs-toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        margin-bottom: 24px;
+        margin-bottom: 28px;
         flex-wrap: wrap;
       }
 
-      .orgs-head h1 {
+      .orgs-toolbar h1 {
         margin: 0;
         font-size: clamp(1.6rem, 2.6vw, 2rem);
       }
 
-      .orgs-head .subtitle {
+      .orgs-toolbar .subtitle {
         margin: 4px 0 0;
         color: var(--ink-muted);
         font-size: 0.95rem;
       }
 
-      .orgs-create {
+      .orgs-toolbar-actions {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         align-items: center;
         flex-wrap: wrap;
       }
 
-      .orgs-create input {
+      .orgs-search {
+        position: relative;
+      }
+
+      .orgs-search input {
         min-width: 240px;
-        padding: 10px 16px;
+        padding: 10px 16px 10px 38px;
         border-radius: 999px;
         border: 1px solid var(--outline);
         background: var(--panel-strong);
@@ -57,12 +67,72 @@
         font-size: 0.9rem;
       }
 
-      .orgs-create input:focus {
+      .orgs-search input:focus {
         outline: none;
         border-color: var(--accent);
-        box-shadow: 0 0 0 4px rgba(63, 104, 255, 0.12);
+        box-shadow: 0 0 0 4px var(--accent-soft);
       }
 
+      .orgs-search::before {
+        content: "";
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        width: 14px;
+        height: 14px;
+        transform: translateY(-50%);
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316213a' stroke-opacity='0.55' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>");
+        background-repeat: no-repeat;
+        background-size: contain;
+      }
+
+      /* --- Hero empty state (shown when zero orgs) --- */
+      .orgs-hero {
+        margin: 32px auto 0;
+        max-width: 560px;
+        text-align: center;
+        background: var(--panel);
+        border: 1px solid var(--outline);
+        border-radius: 28px;
+        padding: 56px 36px 48px;
+        box-shadow: var(--shadow);
+      }
+
+      .orgs-hero-icon {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-radius: 22px;
+      }
+
+      .orgs-hero-icon svg {
+        width: 36px;
+        height: 36px;
+      }
+
+      .orgs-hero h1 {
+        margin: 0 0 10px;
+        font-size: clamp(1.6rem, 2.8vw, 2rem);
+      }
+
+      .orgs-hero p {
+        margin: 0 0 24px;
+        color: var(--ink-muted);
+        font-size: 1rem;
+        line-height: 1.5;
+      }
+
+      .orgs-hero .btn {
+        padding: 12px 24px;
+        font-size: 0.95rem;
+      }
+
+      /* --- Org cards grid --- */
       .orgs-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -72,56 +142,139 @@
       .org-card {
         background: var(--panel);
         border: 1px solid var(--outline);
-        border-radius: 22px;
-        padding: 22px 22px 16px;
-        box-shadow: var(--shadow);
+        border-radius: 20px;
+        padding: 22px 22px 18px;
+        box-shadow: 0 2px 8px rgba(18, 22, 36, 0.04);
         display: grid;
-        gap: 10px;
+        gap: 14px;
         cursor: pointer;
         text-align: left;
         font: inherit;
         color: inherit;
         position: relative;
-        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+        overflow: hidden;
+        transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+      }
+
+      .org-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(63, 104, 255, 0.04) 0%, transparent 40%);
+        pointer-events: none;
       }
 
       .org-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(63, 104, 255, 0.4);
-        box-shadow: 0 16px 32px rgba(18, 22, 36, 0.12);
+        transform: translateY(-3px);
+        border-color: rgba(63, 104, 255, 0.35);
+        box-shadow: 0 18px 32px rgba(18, 22, 36, 0.10);
+      }
+
+      .org-card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
       }
 
       .org-card h2 {
         margin: 0;
-        font-size: 1.15rem;
+        font-size: 1.18rem;
         font-weight: 600;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
       }
 
-      .org-card .meta {
-        font-size: 0.8rem;
+      .org-card-slug {
+        margin: -6px 0 0;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 0.78rem;
         color: var(--ink-muted);
+      }
+
+      .org-card-slug .slug-prefix {
+        opacity: 0.5;
+        margin-right: 1px;
+      }
+
+      .org-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 12px 0 4px;
+        border-top: 1px solid var(--outline);
+      }
+
+      .stat-block {
+        display: grid;
+        gap: 2px;
+      }
+
+      .stat-value {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: var(--ink);
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+      }
+
+      .stat-label {
+        font-size: 0.72rem;
+        color: var(--ink-muted);
+        letter-spacing: 0.02em;
+      }
+
+      .org-card-foot {
         display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 0.75rem;
+        color: var(--ink-muted);
+      }
+
+      .org-card-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 600;
+        color: var(--accent);
+        opacity: 0;
+        transform: translateX(-4px);
+        transition: opacity 200ms ease, transform 200ms ease;
+      }
+
+      .org-card:hover .org-card-cta,
+      .org-card:focus-within .org-card-cta {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .org-card-arrow {
+        font-size: 1.05rem;
+        line-height: 1;
       }
 
       .org-card .delete-org {
         position: absolute;
-        top: 14px;
-        right: 14px;
+        top: 12px;
+        right: 12px;
         display: inline-flex;
         align-items: center;
-        border: 1px solid rgba(185, 28, 28, 0.25);
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border: none;
         background: transparent;
-        color: #b91c1c;
-        font-size: 0.72rem;
-        font-weight: 500;
-        padding: 4px 10px;
+        color: var(--ink-muted);
+        font-size: 1.1rem;
+        line-height: 1;
         border-radius: 999px;
         cursor: pointer;
         user-select: none;
         opacity: 0;
-        transition: opacity 160ms ease, background 160ms ease;
+        transition: opacity 160ms ease, color 160ms ease, background 160ms ease;
+        z-index: 2;
       }
 
       .org-card:hover .delete-org,
@@ -130,30 +283,118 @@
       }
 
       .org-card .delete-org:hover {
-        background: rgba(185, 28, 28, 0.08);
+        color: var(--danger);
+        background: var(--danger-soft);
       }
 
-      .orgs-empty {
-        border-radius: 18px;
-        border: 1px dashed var(--outline);
-        background: var(--panel);
-        padding: 36px 24px;
+      .orgs-no-results {
+        grid-column: 1 / -1;
         text-align: center;
         color: var(--ink-muted);
-      }
-
-      .orgs-empty strong {
-        display: block;
-        color: var(--ink);
-        font-size: 1.05rem;
-        margin-bottom: 8px;
+        padding: 32px 16px;
       }
 
       .orgs-error {
+        margin: 0 0 12px;
+        font-size: 0.85rem;
+        color: var(--danger);
+        min-height: 1.2em;
+      }
+
+      /* --- Create modal --- */
+      .org-dialog {
+        width: min(460px, 92vw);
+        padding: 28px;
+        gap: 16px;
+      }
+
+      .org-dialog .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .org-dialog label {
+        font-size: 0.85rem;
+        color: var(--ink-muted);
+        font-weight: 500;
+      }
+
+      .org-dialog input[type="text"] {
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--outline);
+        background: var(--panel);
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.95rem;
+      }
+
+      .org-dialog input[type="text"]:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px var(--accent-soft);
+      }
+
+      .org-dialog .dialog-error {
         margin: 0;
         font-size: 0.85rem;
-        color: #b91c1c;
-        min-height: 1.2em;
+        color: var(--danger);
+        min-height: 1.1em;
+      }
+
+      .access-mode-chip {
+        flex-shrink: 0;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 0.66rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .access-mode-chip--standalone {
+        background: var(--accent-soft);
+        color: var(--accent);
+        border: 1px solid rgba(63, 104, 255, 0.18);
+      }
+
+      .access-mode-chip--hrms_link {
+        background: rgba(34, 134, 89, 0.10);
+        color: #1e6e44;
+        border: 1px solid rgba(34, 134, 89, 0.22);
+      }
+
+      /* Floating "Create org" button, bottom-right */
+      .fab {
+        position: fixed;
+        right: 28px;
+        bottom: 28px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 10px 18px;
+        border-radius: 999px;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        box-shadow: 0 12px 28px rgba(18, 22, 36, 0.22);
+        z-index: 50;
+        transition: transform 160ms ease, box-shadow 160ms ease;
+      }
+
+      .fab:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 16px 32px rgba(18, 22, 36, 0.28);
+      }
+
+      .fab svg {
+        width: 18px;
+        height: 18px;
       }
     </style>
   </head>
@@ -161,21 +402,44 @@
     <div data-include="app/components/header.html"></div>
 
     <main class="orgs-wrap">
-      <header class="orgs-head">
-        <div>
-          <h1>Organizations</h1>
-          <p class="subtitle">Each organization gets its own policies, recipients, and chatbot.</p>
+      <div id="orgs-view">
+        <div class="orgs-hero" aria-busy="true">
+          <p style="margin:0;color:var(--ink-muted)">Loading organizations…</p>
         </div>
-        <form class="orgs-create" id="org-create">
-          <input type="text" name="name" placeholder="New organization name" required />
-          <button class="btn primary" type="submit">Create</button>
-        </form>
-      </header>
-      <p class="orgs-error" id="org-error" role="alert"></p>
-      <div id="orgs-grid">
-        <div class="orgs-empty">Loading…</div>
       </div>
     </main>
+
+    <!-- Floating create button -->
+    <button class="fab" data-action="open-create" aria-label="Create organization">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Create organization
+    </button>
+
+    <!-- Create-organization modal (rendered hidden by default) -->
+    <div class="dialog-backdrop" id="org-modal" aria-hidden="true">
+      <form class="dialog org-dialog" id="org-create" role="dialog" aria-modal="true" aria-labelledby="org-modal-title">
+        <h2 class="dialog-title" id="org-modal-title">New organization</h2>
+        <div class="field">
+          <label for="org-name-input">Name</label>
+          <input
+            id="org-name-input"
+            type="text"
+            name="name"
+            placeholder="e.g. Acme Industries"
+            autocomplete="off"
+            required
+          />
+        </div>
+        <p class="dialog-error" id="org-dialog-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn ghost" data-action="cancel">Cancel</button>
+          <button type="submit" class="btn primary">Create organization</button>
+        </div>
+      </form>
+    </div>
 
     <script type="module" src="app/scripts/main.js"></script>
     <script type="module" src="app/scripts/orgs.js"></script>

@@ -7,6 +7,8 @@
   --ink-muted: rgba(28, 36, 56, 0.7);
   --accent: #3f68ff;
   --accent-soft: rgba(63, 104, 255, 0.12);
+  --danger: #a74444;
+  --danger-soft: rgba(167, 68, 68, 0.12);
   --brand-yellow: #f0c24d;
   --outline: rgba(28, 36, 56, 0.12);
   --panel: rgba(255, 255, 255, 0.9);
@@ -15,6 +17,19 @@
   --page-bg: radial-gradient(900px 520px at 15% 0%, rgba(63, 104, 255, 0.12), transparent 65%),
     radial-gradient(800px 420px at 85% 10%, rgba(54, 162, 190, 0.12), transparent 70%),
     linear-gradient(180deg, #f5f6fa 0%, #eef1f7 55%, #f9fafc 100%);
+}
+
+body:not([data-role]) [data-admin-only],
+body:not([data-role]) [data-org-admin-only],
+body:not([data-role]) [data-module-admin-only],
+body:not([data-role]) [data-people-admin-only],
+body:not([data-role]) [data-super-admin-only],
+body[data-role="employee"] [data-admin-only],
+body[data-role="employee"] [data-org-admin-only],
+body[data-role="employee"] [data-module-admin-only],
+body[data-role="employee"] [data-people-admin-only],
+body:not([data-role="super_admin"]) [data-super-admin-only] {
+  display: none !important;
 }
 
 * {
@@ -134,7 +149,7 @@ p {
 }
 
 .toast--error {
-  background: rgba(185, 28, 28, 0.92);
+  background: rgba(128, 55, 55, 0.94);
 }
 
 .toast--hide {

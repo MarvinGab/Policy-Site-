@@ -1,10 +1,38 @@
 <section class="dashboard-head" id="modules">
-  <a class="add-policy-btn theme-btn" href="#" aria-label="Themes">
-    <span class="add-policy-icon theme-icon">T</span>
+  <a class="add-policy-btn theme-btn" href="#" aria-label="Themes" data-super-admin-only>
+    <span class="add-policy-icon theme-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.5a1.8 1.8 0 0 0 .5-3.5 1.8 1.8 0 0 1 .5-3.5H16a8 8 0 0 0 0-16h-4z"/><circle cx="7.5" cy="10" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="13.5" cy="7.5" r="1"/><circle cx="16" cy="10" r="1"/></svg>
+    </span>
     <span class="add-policy-text">Themes</span>
   </a>
-  <a class="add-policy-btn" href="policy-admin.html" aria-label="Add policy">
-    <span class="add-policy-icon">+</span>
-    <span class="add-policy-text">Add policy</span>
+  <a class="add-policy-btn manage-modules-btn" href="policy-admin.html#modules" aria-label="Manage modules" data-module-admin-only>
+    <span class="add-policy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    </span>
+    <span class="add-policy-text">Manage modules</span>
+  </a>
+  <a class="add-policy-btn admins-admin-btn" href="policy-admin.html#admins" aria-label="Org admins" data-super-admin-only>
+    <span class="add-policy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3z"/><path d="M9.5 12.5 11.2 14l3.4-4"/></svg>
+    </span>
+    <span class="add-policy-text">Org admins</span>
+  </a>
+  <a class="add-policy-btn people-admin-btn" href="policy-admin.html#people" aria-label="People" data-super-admin-only data-access-mode-show="standalone">
+    <span class="add-policy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+    </span>
+    <span class="add-policy-text">People</span>
+  </a>
+  <a class="add-policy-btn hrms-admin-btn" href="policy-admin.html#hrms" aria-label="HRMS access" data-super-admin-only data-access-mode-show="hrms_link">
+    <span class="add-policy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l2.8-2.8a5 5 0 0 0-7.1-7.1L11.5 4.4"/><path d="M14 11a5 5 0 0 0-7.1 0l-2.8 2.8a5 5 0 0 0 7.1 7.1l1.3-1.3"/></svg>
+    </span>
+    <span class="add-policy-text">HRMS access</span>
+  </a>
+  <a class="add-policy-btn org-settings-btn" href="policy-admin.html#settings" aria-label="Org settings" data-super-admin-only>
+    <span class="add-policy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.3 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1z"/></svg>
+    </span>
+    <span class="add-policy-text">Settings</span>
   </a>
 </section>
