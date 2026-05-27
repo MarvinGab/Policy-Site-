@@ -1,0 +1,6 @@
+{
+  "watch": ["server", "app", "orgs.html", "policies.html", "index.html"],
+  "ext": "js,html,css,sql",
+  "ignore": ["node_modules/**"],
+  "delay": "150"
+}

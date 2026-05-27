@@ -2,10 +2,16 @@ import "dotenv/config";
 import crypto from "crypto";
 import express from "express";
 import session from "express-session";
+import sessionFileStore from "session-file-store";
 import multer from "multer";
+import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
+import cookieParser from "cookie-parser";
 import path from "path";
+import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
+import { ORG_TEMPLATE } from "./org-template.js";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 const IS_PRODUCTION = NODE_ENV === "production";
@@ -13,11 +19,40 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? null : "dev-session-secret");
 const PORT = Number(process.env.PORT || 5173);
+// The "root" hostname. Anything under "*.<ROOT_HOST>" is treated as a per-org subdomain.
+// Dev default is "localhost"; prod will be e.g. "policies.zarohr.com".
+const ROOT_HOST = (process.env.ROOT_HOST || "localhost").toLowerCase();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash-lite";
 const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-001";
+const HRMS_LAUNCH_SECRET = process.env.HRMS_LAUNCH_SECRET || (IS_PRODUCTION ? "" : SESSION_SECRET);
+// Comma-separated parent origins permitted to iframe this app — e.g.
+// "https://hrms.acme.com,https://app.workday.com". When set, the session
+// cookie is issued as SameSite=None (required for cross-site iframes) and a
+// matching Content-Security-Policy frame-ancestors header is sent.
+const HRMS_EMBED_ORIGINS = (process.env.HRMS_EMBED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const HRMS_EMBED_MODE = HRMS_EMBED_ORIGINS.length > 0;
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
+// Last-resort fallback used only when the password_hash column is missing
+// from org_people. Real employees get a unique random token issued via
+// generateAccessToken() and emailed on creation.
+const DEFAULT_EMPLOYEE_PASSWORD = process.env.DEFAULT_EMPLOYEE_PASSWORD || "ChangeMeOnFirstLogin";
+// Per-user daily chat cap. With 50 active users × 20 = 1000, this stays inside
+// the Gemini free-tier 1000 requests/day ceiling. Super-admin is exempt.
+const CHAT_DAILY_CAP_PER_USER = Number(process.env.CHAT_DAILY_CAP_PER_USER || 20);
+const GLOBAL_SMTP = {
+  host: process.env.SMTP_HOST || "",
+  port: Number(process.env.SMTP_PORT || 0) || 587,
+  user: process.env.SMTP_USER || "",
+  pass: process.env.SMTP_PASS || "",
+  from: process.env.SMTP_FROM || process.env.SMTP_USER || "",
+  fromName: process.env.FROM_NAME || "ZaroHR",
+};
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment.");
@@ -29,8 +64,8 @@ if (!SESSION_SECRET) {
   process.exit(1);
 }
 
-if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error("Missing ADMIN_EMAIL or ADMIN_PASSWORD in environment.");
+if (!ADMIN_EMAIL || (!ADMIN_PASSWORD && !ADMIN_PASSWORD_HASH)) {
+  console.error("Missing ADMIN_EMAIL and ADMIN_PASSWORD/ADMIN_PASSWORD_HASH in environment.");
   process.exit(1);
 }
 
@@ -39,33 +74,193 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const app = express();
+app.disable("x-powered-by");
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 12mb covers base64-encoded tile images (a 9mb PNG balloons to ~12mb in base64).
+// Multer-handled multipart uploads aren't gated by this — they have their own
+// limit set at upload() construction time.
+app.use(express.json({ limit: "12mb" }));
+app.use(express.urlencoded({ extended: true, limit: "12mb" }));
+app.use(cookieParser());
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (IS_PRODUCTION) {
+    res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+  }
+  next();
+});
+
+const getOriginHeader = (req) => req.get("origin") || "";
+
+const isAllowedRequestOrigin = (req, originValue) => {
+  if (!originValue) return true;
+  try {
+    const origin = new URL(originValue);
+    const host = req.hostname.toLowerCase();
+    const originHost = origin.hostname.toLowerCase();
+    return originHost === host;
+  } catch {
+    return false;
+  }
+};
+
+const requireSameOriginMutation = (req, res, next) => {
+  if (!["POST", "PATCH", "DELETE", "PUT"].includes(req.method)) return next();
+  const origin = getOriginHeader(req);
+  const referer = req.get("referer") || "";
+  let refererOrigin = "";
+  try {
+    refererOrigin = referer ? new URL(referer).origin : "";
+  } catch {
+    refererOrigin = "invalid";
+  }
+  if (!isAllowedRequestOrigin(req, origin || refererOrigin)) {
+    return res.status(403).send("Cross-site request blocked.");
+  }
+  return next();
+};
+
+app.use(requireSameOriginMutation);
 if (IS_PRODUCTION) {
   app.set("trust proxy", 1);
 }
 
+// Sessions persist to ./sessions/*.json on disk so they survive nodemon restarts
+// (no more "logged out every time I save a file"). 30-day cookie lifetime
+// matches the Amazon-style "remember me" we agreed on.
+const FileStore = sessionFileStore(session);
 app.use(
   session({
+    name: "zarohr.sid",
+    store: new FileStore({
+      path: path.resolve(fileURLToPath(import.meta.url), "..", "..", ".sessions"),
+      ttl: 60 * 60 * 24 * 30, // 30 days, in seconds
+      reapInterval: 60 * 60, // clean expired sessions hourly
+      retries: 0,
+    }),
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    rolling: true, // refresh the cookie on every request
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
+      // SameSite=None is required for the cookie to be sent inside a
+      // cross-origin iframe (HRMS embed). It only works alongside Secure=true,
+      // which the IS_PRODUCTION gate enforces. In dev mode we keep Lax so
+      // local testing isn't blocked by missing HTTPS.
+      sameSite: IS_PRODUCTION ? "none" : "lax",
       secure: IS_PRODUCTION,
+      domain: IS_PRODUCTION ? `.${ROOT_HOST}` : undefined,
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
   })
 );
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
-app.use(express.static(rootDir));
+
+// Subdomain middleware: looks at the hostname, pulls out the leading label
+// (e.g. "trio" from "trio.localhost"), and resolves it to a company row.
+// Attaches `req.company` for downstream handlers. Null on the root domain.
+const getSubdomainSlug = (hostname) => {
+  if (!hostname) return null;
+  const host = hostname.toLowerCase();
+  if (host === ROOT_HOST) return null;
+  if (host.endsWith(`.${ROOT_HOST}`)) {
+    const rawSlug = host.slice(0, -(ROOT_HOST.length + 1)) || null;
+    return rawSlug?.split(".")[0] || null;
+  }
+  return null;
+};
+
+app.use(async (req, res, next) => {
+  const slug = getSubdomainSlug(req.hostname);
+  req.companySlug = slug;
+  req.company = null;
+  if (slug) {
+    try {
+      const { data } = await supabase
+        .from("companies")
+        .select("id, name, slug, access_mode")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (data) req.company = data;
+    } catch (error) {
+      console.error("Subdomain lookup failed:", error);
+    }
+  }
+  next();
+});
+
+app.use(async (req, res, next) => {
+  if (req.path === "/api/hrms/launch") return next();
+  const companyId = req.company?.id || req.session?.user?.companyId || null;
+  let allowedOrigin = "";
+  if (companyId) {
+    try {
+      const settings = await getOrgHrmsSettings(companyId);
+      if (settings?.enabled) allowedOrigin = normalizeOrigin(settings.allowed_origin || "");
+    } catch (error) {
+      console.error("HRMS frame settings lookup failed:", error);
+    }
+  }
+  const fallbackOrigins = HRMS_EMBED_ORIGINS.map(normalizeOrigin).filter(Boolean);
+  const ancestors = Array.from(new Set(["'self'", allowedOrigin, ...fallbackOrigins].filter(Boolean)));
+  if (ancestors.length > 1) {
+    res.setHeader("Content-Security-Policy", `frame-ancestors ${ancestors.join(" ")}`);
+  } else {
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  }
+  next();
+});
+
+// Root path is context-sensitive:
+//   policies.zarohr.com/        -> marketing landing (index.html)
+//   trio.policies.zarohr.com/   -> rail dashboard (policies.html, populated by JS)
+//   unknown.policies.zarohr.com/ -> 404
+app.get("/", (req, res, next) => {
+  if (req.companySlug && !req.company) {
+    return res
+      .status(404)
+      .type("html")
+      .send(
+        `<!doctype html><meta charset="utf-8"><title>Organization not found</title>
+         <body style="font-family:system-ui;padding:48px;max-width:520px;margin:auto">
+         <h1>Organization not found</h1>
+         <p>The address <code>${escapeHtml(req.hostname)}</code> doesn't match any organization.</p>
+         <p><a href="http://${escapeHtml(ROOT_HOST)}:${PORT}/">Back to main site</a></p>
+         </body>`
+      );
+  }
+  if (req.company) {
+    return res.sendFile(path.join(rootDir, "policies.html"));
+  }
+  return next();
+});
+
+const escapeHtml = (value = "") =>
+  String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
+app.use(
+  express.static(rootDir, {
+    setHeaders: (res) => {
+      if (!IS_PRODUCTION) {
+        res.setHeader("Cache-Control", "no-store");
+      }
+    },
+  })
+);
 
 const requireAuth = (req, res, next) => {
   if (!req.session?.user) {
@@ -86,6 +281,34 @@ const requireAdmin = (req, res, next) => {
 
 const sanitizeFilename = (name = "") => name.replace(/[^a-zA-Z0-9._-]/g, "_");
 const sanitizeText = (value = "") => String(value).replace(/\s+/g, " ").trim();
+const sanitizeEmail = (value = "") => sanitizeText(value).toLowerCase();
+const isUuid = (value = "") =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const POLICY_FILE_TYPES = new Map([
+  [".pdf", new Set(["application/pdf"])],
+  [".docx", new Set(["application/vnd.openxmlformats-officedocument.wordprocessingml.document"])],
+  [".doc", new Set(["application/msword", "application/octet-stream"])],
+  [".txt", new Set(["text/plain"])],
+]);
+
+const validatePolicyUpload = (file) => {
+  if (!file?.originalname) return "Missing file.";
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedMimes = POLICY_FILE_TYPES.get(ext);
+  if (!allowedMimes) return "Only PDF, DOC, DOCX, and TXT policy files are allowed.";
+  const mime = String(file.mimetype || "").toLowerCase();
+  if (!allowedMimes.has(mime)) {
+    return `File type mismatch. ${ext} files cannot be uploaded as ${mime || "unknown content type"}.`;
+  }
+  return "";
+};
+
+const isSuperAdminPasswordValid = async (password) => {
+  if (!password) return false;
+  if (ADMIN_PASSWORD_HASH) return bcrypt.compare(password, ADMIN_PASSWORD_HASH);
+  return password === ADMIN_PASSWORD;
+};
 
 const chunkText = (text, { chunkSize = 180, overlap = 24 } = {}) => {
   const cleaned = sanitizeText(text);
@@ -121,23 +344,35 @@ const chunkText = (text, { chunkSize = 180, overlap = 24 } = {}) => {
   return chunks;
 };
 
-const fetchGemini = async (path, payload) => {
+// Gemini call with a single 2-second backoff on rate-limit (429) or server
+// (5xx) errors. On the free tier, brief bursts can trip the 15-RPM limit;
+// a silent retry covers that without surfacing an error to the user.
+const fetchGemini = async (path, payload, { maxRetries = 1 } = {}) => {
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY in environment.");
   }
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${path}?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }
-  );
-  if (!response.ok) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${path}?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+    if (response.ok) return response.json();
+
     const message = await response.text();
-    throw new Error(message || "Gemini request failed.");
+    lastError = new Error(message || "Gemini request failed.");
+    lastError.status = response.status;
+
+    // Retry only on 429 (rate limit) and 5xx (transient server errors).
+    const transient = response.status === 429 || response.status >= 500;
+    if (!transient || attempt === maxRetries) throw lastError;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  return response.json();
+  throw lastError;
 };
 
 const embedText = async (text) => {
@@ -147,9 +382,56 @@ const embedText = async (text) => {
   return result?.embedding?.values || [];
 };
 
+// Per-user daily chat counter, backed by the chat_usage table. The atomic
+// insert/update via Postgres avoids races when the same user fires two
+// requests at once. Returns { count, remaining } so the caller can both
+// gate the call and surface remaining quota to the UI.
+const recordChatUsage = async (userId) => {
+  if (!userId) return { count: 0, remaining: CHAT_DAILY_CAP_PER_USER };
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  const { data, error } = await supabase.rpc("increment_chat_usage", {
+    p_user_id: String(userId),
+    p_day: today,
+  });
+  if (error) {
+    // Fallback: select + upsert. Slower, slight race, but keeps things
+    // running if the RPC isn't created yet.
+    const { data: existing } = await supabase
+      .from("chat_usage")
+      .select("count")
+      .eq("user_id", String(userId))
+      .eq("day", today)
+      .maybeSingle();
+    const next = (existing?.count || 0) + 1;
+    await supabase
+      .from("chat_usage")
+      .upsert({ user_id: String(userId), day: today, count: next }, { onConflict: "user_id,day" });
+    return { count: next, remaining: Math.max(0, CHAT_DAILY_CAP_PER_USER - next) };
+  }
+  const count = Number(data) || 0;
+  return { count, remaining: Math.max(0, CHAT_DAILY_CAP_PER_USER - count) };
+};
+
+const peekChatUsage = async (userId) => {
+  if (!userId) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("chat_usage")
+    .select("count")
+    .eq("user_id", String(userId))
+    .eq("day", today)
+    .maybeSingle();
+  return data?.count || 0;
+};
+
 const chatWithGemini = async (prompt) => {
   const result = await fetchGemini(`${GEMINI_CHAT_MODEL}:generateContent`, {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.25,
+      topP: 0.9,
+      maxOutputTokens: 650,
+    },
   });
   return result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 };
@@ -161,15 +443,317 @@ const slugify = (value = "") =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "org";
 
+// Subdomain slugs that would collide with system paths/subdomains if assigned
+// to an org. e.g. an org named "API" would get slug "api", which then makes
+// `api.<root>/api/*` ambiguous with the real API routes.
+const RESERVED_SLUGS = new Set([
+  "www",
+  "api",
+  "admin",
+  "app",
+  "mail",
+  "smtp",
+  "root",
+  "support",
+  "docs",
+  "status",
+  "orgs",
+  "policies",
+  "policy-admin",
+  "dashboard",
+  "login",
+  "signup",
+  "billing",
+  "settings",
+  "hrms",
+  "auth",
+  "public",
+  "static",
+  "assets",
+  "uploads",
+]);
+
+const isReservedSlug = (slug) => RESERVED_SLUGS.has(String(slug || "").toLowerCase());
+
 const generateAccessToken = () => crypto.randomBytes(18).toString("base64url");
+
+const getRootBaseUrl = (req) => `${req.protocol}://${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}`;
+
+const buildHrmsCanonicalPayload = ({ org, email, exp, name = "", role = "employee", externalId = "" }) =>
+  [
+    `org=${slugify(org)}`,
+    `email=${sanitizeEmail(email)}`,
+    `exp=${String(exp || "")}`,
+    `name=${sanitizeText(name || "")}`,
+    `role=${role === "admin" ? "admin" : "employee"}`,
+    `external_id=${sanitizeText(externalId || "")}`,
+  ].join("\n");
+
+const signHrmsLaunch = (payload, secret = HRMS_LAUNCH_SECRET) =>
+  crypto.createHmac("sha256", secret).update(payload).digest("hex");
+
+const safeEqualHex = (left = "", right = "") => {
+  if (!/^[a-f0-9]{64}$/i.test(left) || !/^[a-f0-9]{64}$/i.test(right)) return false;
+  return crypto.timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
+};
+
+const normalizeOrigin = (value = "") => {
+  const raw = sanitizeText(value || "");
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && !IS_PRODUCTION)) return "";
+    return url.origin;
+  } catch {
+    return "";
+  }
+};
+
+const generateHrmsSecret = () => crypto.randomBytes(32).toString("base64url");
+
+const getOrgHrmsSettings = async (companyId) => {
+  if (!companyId) return null;
+  const { data, error } = await supabase
+    .from("org_hrms_settings")
+    .select("company_id, enabled, allowed_origin, launch_secret, last_rotated_at, updated_at")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (error && error.code !== "42P01") throw error;
+  return data || null;
+};
+
+const getHrmsSecretForCompany = async (companyId) => {
+  const settings = await getOrgHrmsSettings(companyId);
+  return settings?.launch_secret || HRMS_LAUNCH_SECRET || "";
+};
+
+const buildHrmsLaunchTemplate = ({ req, company, secret }) => {
+  const exp = Math.floor(Date.now() / 1000) + 300;
+  const canonical = buildHrmsCanonicalPayload({
+    org: company.slug,
+    email: "employee@example.com",
+    name: "Employee Name",
+    role: "employee",
+    exp,
+    externalId: "EMP001",
+  });
+  const sig = secret ? signHrmsLaunch(canonical, secret) : "CONFIGURE_LAUNCH_SECRET";
+  const params = new URLSearchParams({
+    org: company.slug,
+    email: "employee@example.com",
+    name: "Employee Name",
+    role: "employee",
+    exp: String(exp),
+    external_id: "EMP001",
+    sig,
+  });
+  return `${getRootBaseUrl(req)}/api/hrms/launch?${params.toString()}`;
+};
+
+const isGlobalSmtpConfigured = () =>
+  Boolean(GLOBAL_SMTP.host && GLOBAL_SMTP.user && GLOBAL_SMTP.pass && GLOBAL_SMTP.from);
+
+const sendOrgAdminInvite = async ({ to, name, orgName, orgSlug, password, req }) => {
+  if (!isGlobalSmtpConfigured()) {
+    throw new Error("ZaroHR SMTP is not configured.");
+  }
+  const transporter = nodemailer.createTransport({
+    host: GLOBAL_SMTP.host,
+    port: GLOBAL_SMTP.port,
+    secure: GLOBAL_SMTP.port === 465,
+    auth: {
+      user: GLOBAL_SMTP.user,
+      pass: GLOBAL_SMTP.pass,
+    },
+  });
+  const loginUrl = `${req.protocol}://${orgSlug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/index.html#login`;
+  const displayName = name || to;
+  await transporter.sendMail({
+    from: `"${GLOBAL_SMTP.fromName}" <${GLOBAL_SMTP.from}>`,
+    to,
+    subject: `${orgName} is ready on policies.zarohr`,
+    text:
+      `Hi ${displayName},\n\n` +
+      `${orgName} has been initialized on policies.zarohr.\n\n` +
+      `Login URL: ${loginUrl}\n` +
+      `Email: ${to}\n` +
+      `Temporary password: ${password}\n\n` +
+      `You will be asked to set a new password on first sign-in.\n\n` +
+      `ZaroHR`,
+  });
+};
+
+// Build a nodemailer transport for an org. Prefers the org's own SMTP settings
+// (configured in the admin Email tab) and falls back to the global ZaroHR
+// SMTP if the org hasn't set theirs up yet. Returns { transporter, from } or
+// throws when neither side is configured.
+const buildOrgTransport = async ({ companyId, orgName }) => {
+  const { data: orgSmtp } = await supabase
+    .from("org_smtp_settings")
+    .select("host, port, username, password, from_email, from_name")
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  const useOrgSmtp =
+    orgSmtp && orgSmtp.host && orgSmtp.username && orgSmtp.password && (orgSmtp.from_email || orgSmtp.username);
+
+  if (useOrgSmtp) {
+    const transporter = nodemailer.createTransport({
+      host: orgSmtp.host,
+      port: Number(orgSmtp.port) || 587,
+      secure: Number(orgSmtp.port) === 465,
+      auth: { user: orgSmtp.username, pass: orgSmtp.password },
+    });
+    const fromName = orgSmtp.from_name || orgName;
+    return { transporter, from: `"${fromName}" <${orgSmtp.from_email || orgSmtp.username}>` };
+  }
+  if (isGlobalSmtpConfigured()) {
+    const transporter = nodemailer.createTransport({
+      host: GLOBAL_SMTP.host,
+      port: GLOBAL_SMTP.port,
+      secure: GLOBAL_SMTP.port === 465,
+      auth: { user: GLOBAL_SMTP.user, pass: GLOBAL_SMTP.pass },
+    });
+    return { transporter, from: `"${GLOBAL_SMTP.fromName}" <${GLOBAL_SMTP.from}>` };
+  }
+  throw new Error("No SMTP is configured for this organization.");
+};
+
+// Magic-link sign-in. Generates a one-time, browser-bound token, persists it,
+// and emails the corresponding link. The browser_id is the random value from
+// the `pending_login` cookie set on the same request — clicking the link from
+// any other browser is rejected because that browser won't have the cookie.
+const TOKEN_EXPIRY_MS = {
+  invite: 7 * 24 * 60 * 60 * 1000, // 7 days for admin-issued onboarding
+  recovery: 15 * 60 * 1000,         // 15 minutes for user-requested re-auth
+};
+
+const generateBrowserId = () => crypto.randomBytes(18).toString("base64url");
+
+// Returns the existing browser_id cookie or sets a new one. Idempotent so
+// repeat requests from the same browser keep using the same id.
+const ensurePendingLoginCookie = (req, res) => {
+  let id = req.cookies?.pending_login || null;
+  if (!id) {
+    id = generateBrowserId();
+    res.cookie("pending_login", id, {
+      httpOnly: true,
+      sameSite: IS_PRODUCTION ? "none" : "lax",
+      secure: IS_PRODUCTION,
+      domain: IS_PRODUCTION ? `.${ROOT_HOST}` : undefined,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+  }
+  return id;
+};
+
+const buildOrgLoginUrl = (req, orgSlug, path = "") => {
+  if (!IS_PRODUCTION && req.hostname === ROOT_HOST) return `/${path}`.replace(/^\/+/, "/");
+  return `${req.protocol}://${orgSlug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/${path}`.replace(/(?<!:)\/+/g, "/");
+};
+
+const sendMagicLink = async ({ companyId, orgName, orgSlug, to, name, kind, req, res }) => {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const browserId = ensurePendingLoginCookie(req, res);
+  const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MS[kind]).toISOString();
+
+  const { error: insertError } = await supabase.from("magic_tokens").insert({
+    token,
+    company_id: companyId,
+    email: String(to).trim().toLowerCase(),
+    kind,
+    browser_id: browserId,
+    expires_at: expiresAt,
+  });
+  if (insertError) throw insertError;
+
+  const linkUrl = buildOrgLoginUrl(req, orgSlug, `auth/link?token=${encodeURIComponent(token)}`);
+  const { transporter, from } = await buildOrgTransport({ companyId, orgName });
+  const displayName = name || to;
+  const expiryNote = kind === "invite" ? "This link is valid for 7 days." : "This link is valid for the next 15 minutes.";
+  await transporter.sendMail({
+    from,
+    to,
+    subject: kind === "invite" ? `Welcome to ${orgName} — your policy portal access` : `Sign in to ${orgName}`,
+    text:
+      `Hi ${displayName},\n\n` +
+      (kind === "invite"
+        ? `You've been added to the ${orgName} policy portal.\n\n`
+        : `Here's the sign-in link you requested.\n\n`) +
+      `Click to sign in:\n${linkUrl}\n\n` +
+      `${expiryNote} For your security, open it on the same device you'll use the portal from.\n\n` +
+      `${orgName}`,
+  });
+  return { token, linkUrl };
+};
+
+const resolveLoginCompany = async ({ organization, company, email }) => {
+  // 1. Subdomain wins (set by the org-resolver middleware).
+  if (company?.id) return company;
+
+  // 2. Explicit org typed in the form (kept for super-admin convenience and
+  //    forwards-compat when a slug arrives as a query param).
+  const orgValue = sanitizeText(organization || "");
+  if (orgValue) {
+    const slug = slugify(orgValue);
+    const { data: slugMatch, error: slugError } = await supabase
+      .from("companies")
+      .select("id, name, slug, access_mode")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (slugError) throw slugError;
+    if (slugMatch) return slugMatch;
+    const { data: nameMatch, error: nameError } = await supabase
+      .from("companies")
+      .select("id, name, slug, access_mode")
+      .ilike("name", orgValue)
+      .maybeSingle();
+    if (nameError) throw nameError;
+    if (nameMatch) return nameMatch;
+  }
+
+  // 3. Fall back to email lookup. If the email exists in exactly one org's
+  //    people list, we use that org. Ambiguous (multi-org emails) returns
+  //    null so the caller can ask for an explicit org.
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail) return null;
+  const { data: peopleRows, error: peopleError } = await supabase
+    .from("org_people")
+    .select("company_id, status")
+    .eq("email", cleanEmail);
+  if (peopleError) throw peopleError;
+  const activeOrgIds = Array.from(
+    new Set(
+      (peopleRows || [])
+        .filter((row) => row.status !== "disabled")
+        .map((row) => row.company_id)
+    )
+  );
+  if (activeOrgIds.length !== 1) return null;
+  const { data: companyRow, error: companyError } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("id", activeOrgIds[0])
+    .maybeSingle();
+  if (companyError) throw companyError;
+  return companyRow || null;
+};
+
+const isMissingColumnError = (error) =>
+  error?.code === "42703" || error?.code === "PGRST204" || /column .* does not exist|schema cache/i.test(error?.message || "");
 
 const extractTextFromFile = async (file) => {
   if (!file) return "";
   const mime = file.mimetype || "";
   if (mime === "application/pdf") {
-    const { default: pdfParse } = await import("pdf-parse");
-    const result = await pdfParse(file.buffer);
-    return result.text || "";
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: file.buffer });
+    try {
+      const result = await parser.getText();
+      return result.text || "";
+    } finally {
+      await parser.destroy();
+    }
   }
   if (mime.includes("word") || mime.includes("officedocument")) {
     const { default: mammoth } = await import("mammoth");
@@ -182,22 +766,269 @@ const extractTextFromFile = async (file) => {
   return "";
 };
 
-app.post("/api/login", async (req, res) => {
-  const { email, userid, password } = req.body || {};
+const inferMimeFromPath = (filePath = "") => {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (lower.endsWith(".doc")) return "application/msword";
+  if (lower.endsWith(".txt") || lower.endsWith(".csv") || lower.endsWith(".md")) return "text/plain";
+  return "application/octet-stream";
+};
+
+const indexPolicyDocument = async ({ policyId, companyId, documentId, file }) => {
+  const extracted = sanitizeText(await extractTextFromFile(file));
+  if (!extracted) return { chunks: 0, reason: "No readable text found." };
+
+  const chunks = chunkText(extracted);
+  if (!chunks.length) return { chunks: 0, reason: "No chunks created." };
+
+  const EMBED_CONCURRENCY = 5;
+  const embeddings = new Array(chunks.length);
+  for (let i = 0; i < chunks.length; i += EMBED_CONCURRENCY) {
+    const batch = chunks.slice(i, i + EMBED_CONCURRENCY);
+    const results = await Promise.all(batch.map((chunk) => embedText(chunk)));
+    results.forEach((embedding, j) => {
+      embeddings[i + j] = { chunk: batch[j], embedding };
+    });
+  }
+
+  await supabase.from("policy_chunks").delete().eq("document_id", documentId);
+  const payload = embeddings.map(({ chunk, embedding }) => ({
+    policy_id: policyId,
+    company_id: companyId,
+    document_id: documentId,
+    chunk_text: chunk,
+    embedding,
+  }));
+  const { error: chunkError } = await supabase.from("policy_chunks").insert(payload);
+  if (chunkError) throw chunkError;
+  return { chunks: payload.length };
+};
+
+// Rate limiters. Keyed by IP. Numbers are deliberately generous for normal
+// users but tight enough to choke credential-stuffing, LLM-cost abuse, and
+// upload spam. `standardHeaders: true` advertises remaining quota in
+// RateLimit-* headers; `trust proxy` (set above for production) makes
+// req.ip reflect the real client through a load balancer.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many login attempts. Try again in a few minutes.",
+});
+
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many chat requests. Please slow down.",
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many uploads in a short time. Please slow down.",
+});
+
+// Unified login. Two paths:
+//   1. Super-admin: email + password from .env → password session, redirect to /orgs.html.
+//   2. Everyone else (org admin / employee): email only → magic link emailed,
+//      response carries { magic_link_sent: true } so the form shows
+//      "Check your inbox." A password sent for a non-super-admin email is
+//      simply ignored — those accounts are passwordless.
+app.post("/api/login", loginLimiter, async (req, res) => {
+  const { email, userid, password, remember, organization } = req.body || {};
   const identifier = String(email || userid || "").trim().toLowerCase();
-  if (!identifier || !password) {
-    return res.status(400).send("Email and password are required.");
+  if (!identifier) {
+    return res.status(400).send("Email is required.");
   }
-  if (identifier !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    return res.status(401).send("Invalid credentials.");
+
+  if (identifier === ADMIN_EMAIL && await isSuperAdminPasswordValid(password)) {
+    req.session.user = {
+      id: "admin",
+      email: ADMIN_EMAIL,
+      role: "super_admin",
+      companyId: null,
+    };
+    if (remember === false) {
+      req.session.cookie.expires = false;
+      req.session.cookie.maxAge = null;
+    }
+    const rootUrl = `${req.protocol}://${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/orgs.html`;
+    return res.json({ role: "super_admin", email: ADMIN_EMAIL, redirect: rootUrl });
   }
-  req.session.user = {
-    id: "admin",
-    email: ADMIN_EMAIL,
-    role: "super_admin",
-    companyId: null,
+
+  // Org-admin password path — root-domain login. An admin row in org_people
+  // with a password_hash matches here. Employees never have a password_hash
+  // (they're passwordless / magic-link only) so they can't auth here.
+  if (password) {
+    const { data: adminRow } = await supabase
+      .from("org_people")
+      .select("id, company_id, email, name, role, status, password_hash, companies(id, name, slug)")
+      .eq("email", identifier)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (adminRow && adminRow.status !== "disabled" && adminRow.password_hash) {
+      const ok = await bcrypt.compare(password, adminRow.password_hash);
+      if (ok) {
+        const co = adminRow.companies || {};
+        req.session.user = {
+          id: adminRow.id,
+          email: adminRow.email,
+          name: adminRow.name || adminRow.email,
+          role: "admin",
+          companyId: adminRow.company_id,
+          selectedCompany: { id: co.id, name: co.name, slug: co.slug },
+        };
+        if (remember === false) {
+          req.session.cookie.expires = false;
+          req.session.cookie.maxAge = null;
+        }
+        const dest = !IS_PRODUCTION && req.hostname === ROOT_HOST
+          ? "/policy-admin.html"
+          : `${req.protocol}://${co.slug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/policy-admin.html`;
+        return res.json({ role: "admin", email: adminRow.email, org: co, redirect: dest });
+      }
+    }
+    // Password was supplied but didn't match anything → reject explicitly.
+    // Don't fall through to the magic-link path; that would be confusing.
+    return res.status(401).send("Email or password is wrong.");
+  }
+
+  // Magic-link path: find the org via the email (or explicit org), check that
+  // the email is on that org's allowlist, then email a one-time link.
+  const company = await resolveLoginCompany({ organization, company: req.company, email: identifier });
+  if (!company) {
+    return res.status(404).send("This email isn't on the access list. Contact your admin.");
+  }
+
+  // Lock-down: in hrms_link mode the HRMS owns auth. Email magic-link path is
+  // explicitly disabled so the org has exactly one entry point.
+  if ((company.access_mode || "standalone") === "hrms_link") {
+    return res
+      .status(403)
+      .send("This organization signs in through your HRMS. Open the policy portal from there.");
+  }
+
+  const { data: person, error: personError } = await supabase
+    .from("org_people")
+    .select("id, email, name, role, status")
+    .eq("company_id", company.id)
+    .eq("email", identifier)
+    .maybeSingle();
+  if (personError) {
+    console.error("Auth lookup failed:", personError);
+    return res.status(500).send("Sign-in failed.");
+  }
+  if (!person || person.status === "disabled") {
+    return res.status(404).send("This email isn't on the access list. Contact your admin.");
+  }
+
+  try {
+    const { linkUrl } = await sendMagicLink({
+      companyId: company.id,
+      orgName: company.name,
+      orgSlug: company.slug,
+      to: identifier,
+      name: person.name,
+      kind: "recovery",
+      req,
+      res,
+    });
+    return res.json({
+      magic_link_sent: true,
+      email: identifier,
+      // In dev surface the URL so you can click it without checking email.
+      ...(IS_PRODUCTION ? {} : { dev_link: linkUrl }),
+    });
+  } catch (error) {
+    console.error("Magic-link send failed:", error);
+    return res.status(500).send(error.message || "Could not send sign-in link.");
+  }
+});
+
+// Click endpoint for magic links. Validates the token: exists, unused, not
+// expired, browser_id matches the pending_login cookie. On success starts a
+// session and redirects to /policies.html on the org's subdomain.
+app.get("/auth/link", async (req, res) => {
+  // On any failure, send the user back to the org subdomain login page with
+  // an error code so the page can show a banner + the "request a new link"
+  // form. The error codes match what auth.js displays.
+  const failTo = (slug, errorCode) => {
+    const base = !IS_PRODUCTION && req.hostname === ROOT_HOST
+      ? "/index.html"
+      : `${req.protocol}://${slug || req.hostname}${IS_PRODUCTION ? "" : `:${PORT}`}/index.html`;
+    return res.redirect(303, `${base}?login_error=${errorCode}#login`);
   };
-  return res.json({ role: "super_admin", email: ADMIN_EMAIL });
+
+  const token = String(req.query.token || "");
+  if (!token) return failTo(null, "missing");
+
+  const { data: row, error } = await supabase
+    .from("magic_tokens")
+    .select("token, company_id, email, kind, browser_id, expires_at, used_at")
+    .eq("token", token)
+    .maybeSingle();
+  if (error) {
+    console.error("Magic token lookup failed:", error);
+    if (/magic_tokens/.test(error.message || "")) {
+      return res
+        .status(500)
+        .send("magic_tokens table missing. Run server/schema.sql in Supabase, then request a fresh link.");
+    }
+    return failTo(null, "missing");
+  }
+  if (!row) return failTo(null, "missing");
+
+  // Look up the company up front so we can redirect failures to the right
+  // subdomain.
+  const { data: company } = await supabase
+    .from("companies")
+    .select("id, name, slug")
+    .eq("id", row.company_id)
+    .maybeSingle();
+  const slug = company?.slug || null;
+
+  if (row.used_at) return failTo(slug, "used");
+  if (new Date(row.expires_at).getTime() < Date.now()) return failTo(slug, "expired");
+  if (req.cookies?.pending_login !== row.browser_id) return failTo(slug, "device");
+
+  if (!company) return failTo(null, "missing");
+
+  const { data: person } = await supabase
+    .from("org_people")
+    .select("id, email, name, role, status")
+    .eq("company_id", company.id)
+    .eq("email", row.email)
+    .maybeSingle();
+  if (!person || person.status === "disabled") return failTo(slug, "missing");
+
+  // Burn the token so the link can't be reused.
+  await supabase
+    .from("magic_tokens")
+    .update({ used_at: new Date().toISOString() })
+    .eq("token", token);
+
+  req.session.user = {
+    id: person.id,
+    email: person.email,
+    name: person.name || person.email,
+    role: person.role === "admin" ? "admin" : "employee",
+    companyId: company.id,
+    selectedCompany: company,
+    authSource: "magic_link",
+  };
+
+  const redirectPath = person.role === "admin" ? "/policy-admin.html" : "/policies.html";
+  // Always land on the org subdomain for the dashboard.
+  const dest = !IS_PRODUCTION && req.hostname === ROOT_HOST
+    ? redirectPath
+    : `${req.protocol}://${company.slug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}${redirectPath}`;
+  return res.redirect(303, dest);
 });
 
 // --- Super admin: organization management ---
@@ -208,24 +1039,133 @@ const requireSuperAdmin = (req, res, next) => {
   return next();
 };
 
-app.get("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
+const resolveRequestCompanyId = (req) => req.company?.id || req.session?.user?.companyId || null;
+
+const requireOrgManager = (req, res, next) => {
+  if (!req.session?.user) return res.status(401).send("Not authenticated.");
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  if (req.session.user.role === "super_admin") {
+    req.orgCompanyId = companyId;
+    return next();
+  }
+  if (req.session.user.role === "admin" && req.session.user.companyId === companyId) {
+    req.orgCompanyId = companyId;
+    return next();
+  }
+  return res.status(403).send("Admin access required.");
+};
+
+const requireStandaloneEmployeeAccess = async (req, res, next) => {
   const { data, error } = await supabase
     .from("companies")
-    .select("id, name, slug, access_token, created_at")
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.error("List orgs failed:", error);
+    .select("access_mode")
+    .eq("id", req.orgCompanyId)
+    .maybeSingle();
+  if (error && !isMissingColumnError(error)) {
+    console.error("Employee access mode lookup failed:", error);
+    return res.status(500).send("Failed to verify employee access mode.");
+  }
+  if ((data?.access_mode || "standalone") === "hrms_link") {
+    return res.status(403).send("People are managed by the HRMS in HRMS Tile mode.");
+  }
+  return next();
+};
+
+const requireOrgAccess = (req, res, next) => {
+  if (!req.session?.user) return res.status(401).send("Not authenticated.");
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  if (req.session.user.role === "super_admin" || req.session.user.companyId === companyId) {
+    req.orgCompanyId = companyId;
+    return next();
+  }
+  return res.status(403).send("Organization access required.");
+};
+
+app.get("/api/admin/config", requireSuperAdmin, async (req, res) => {
+  const templateModules = ORG_TEMPLATE.length;
+  const templatePolicies = ORG_TEMPLATE.reduce((sum, m) => sum + m.policies.length, 0);
+  return res.json({
+    root_host: ROOT_HOST,
+    is_production: IS_PRODUCTION,
+    template_modules: templateModules,
+    template_policies: templatePolicies,
+  });
+});
+
+app.get("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
+  // Fetch orgs + per-org counts in parallel. Employees/admins come from
+  // org_people (the real source now that magic-link auth is the standard).
+  const [orgsResp, peopleResp, policiesResp] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id, name, slug, access_token, access_mode, created_at")
+      .order("created_at", { ascending: false }),
+    supabase.from("org_people").select("company_id, role").neq("status", "disabled"),
+    supabase.from("org_policies").select("company_id"),
+  ]);
+
+  if (orgsResp.error) {
+    console.error("List orgs failed:", orgsResp.error);
     return res.status(500).send("Failed to load organizations.");
   }
-  return res.json(data || []);
+
+  const employeeCounts = new Map();
+  const adminCounts = new Map();
+  for (const row of peopleResp.data || []) {
+    if (!row.company_id) continue;
+    const map = row.role === "admin" ? adminCounts : employeeCounts;
+    map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
+  }
+  const policyCounts = new Map();
+  for (const row of policiesResp.data || []) {
+    if (!row.company_id) continue;
+    policyCounts.set(row.company_id, (policyCounts.get(row.company_id) || 0) + 1);
+  }
+
+  const enriched = (orgsResp.data || []).map((o) => ({
+    ...o,
+    employee_count: employeeCounts.get(o.id) || 0,
+    admin_count: adminCounts.get(o.id) || 0,
+    policy_count: policyCounts.get(o.id) || 0,
+  }));
+  return res.json(enriched);
+});
+
+app.post("/api/admin/orgs/:id/select", requireSuperAdmin, async (req, res) => {
+  const orgId = req.params.id;
+  const { data: company, error } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) {
+    console.error("Select org failed:", error);
+    return res.status(500).send("Failed to select organization.");
+  }
+  if (!company) return res.status(404).send("Organization not found.");
+  req.session.user.companyId = company.id;
+  req.session.user.selectedCompany = company;
+  return res.json({ org: company, redirect: "/policies.html" });
 });
 
 app.post("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
   const name = sanitizeText(req.body?.name || "");
   if (!name) return res.status(400).send("Organization name is required.");
 
-  // Ensure slug is unique.
+  // Reserved-slug guard: reject names whose slug would collide with a system
+  // subdomain or path. Better to fail loudly here than silently break
+  // subdomain routing later.
   const baseSlug = slugify(name);
+  if (isReservedSlug(baseSlug)) {
+    return res
+      .status(400)
+      .send(`"${baseSlug}" is reserved for system use. Please pick a different organization name.`);
+  }
+
+  // Ensure slug is unique. The uniqueness suffix also re-checks reserved
+  // (extremely unlikely to suffix into a reserved slug, but cheap to verify).
   let slug = baseSlug;
   let suffix = 1;
   while (true) {
@@ -234,7 +1174,7 @@ app.post("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
       .select("id")
       .eq("slug", slug)
       .maybeSingle();
-    if (!existing) break;
+    if (!existing && !isReservedSlug(slug)) break;
     suffix += 1;
     slug = `${baseSlug}-${suffix}`;
   }
@@ -248,11 +1188,1429 @@ app.post("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
     console.error("Create org failed:", error);
     return res.status(500).send(error.message || "Failed to create organization.");
   }
+
+  // Seed default template (7 modules, 27 policies) so the new org's dashboard
+  // isn't empty. Logged but non-fatal if it fails.
+  try {
+    await seedTemplate(data.id);
+  } catch (seedError) {
+    console.error("Org seed failed (org still created):", seedError);
+  }
+
   return res.status(201).json(data);
+});
+
+const seedTemplate = async (companyId) => {
+  const moduleRows = ORG_TEMPLATE.map((m, i) => ({
+    company_id: companyId,
+    name: m.name,
+  }));
+  const { data: modules, error: moduleError } = await supabase
+    .from("org_modules")
+    .insert(moduleRows)
+    .select("id, name");
+  if (moduleError) throw moduleError;
+
+  const policyRows = [];
+  for (const moduleRow of modules || []) {
+    const tpl = ORG_TEMPLATE.find((m) => m.name === moduleRow.name);
+    if (!tpl) continue;
+    tpl.policies.forEach((policyName, idx) => {
+      policyRows.push({
+        company_id: companyId,
+        module_id: moduleRow.id,
+        name: policyName,
+      });
+    });
+  }
+  if (policyRows.length) {
+    const { error: policyError } = await supabase.from("org_policies").insert(policyRows);
+    if (policyError) throw policyError;
+  }
+};
+
+// Fetch the full module → policies tree for one organization. Used by the rail dashboard.
+// Build the modules + policies tree for one company.
+const fetchOrgDashboard = async (companyId, { ensureTemplate = false, includeHidden = false } = {}) => {
+  let moduleQuery = supabase
+    .from("org_modules")
+    .select("id, name, description, image_url, is_hidden")
+    .eq("company_id", companyId)
+    .order("name", { ascending: true });
+  if (!includeHidden) moduleQuery = moduleQuery.eq("is_hidden", false);
+
+  let policyQuery = supabase
+    .from("org_policies")
+    .select("id, module_id, name, is_hidden")
+    .eq("company_id", companyId)
+    .order("name", { ascending: true });
+  if (!includeHidden) policyQuery = policyQuery.eq("is_hidden", false);
+
+  let [{ data: modules, error: moduleFetchError }, { data: policies, error: policyFetchError }] = await Promise.all([
+    moduleQuery,
+    policyQuery,
+  ]);
+  if (policyFetchError && isMissingColumnError(policyFetchError)) {
+    // is_hidden column not yet migrated on org_policies — fall back to
+    // selecting without it. Treat all policies as visible.
+    const fallback = await supabase
+      .from("org_policies")
+      .select("id, module_id, name")
+      .eq("company_id", companyId)
+      .order("name", { ascending: true });
+    policies = (fallback.data || []).map((p) => ({ ...p, is_hidden: false }));
+    policyFetchError = fallback.error;
+  }
+  if (moduleFetchError && isMissingColumnError(moduleFetchError)) {
+    const fallback = await supabase
+      .from("org_modules")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .order("name", { ascending: true });
+    modules = (fallback.data || []).map((module) => ({
+      ...module,
+      description: "",
+      image_url: "",
+      is_hidden: false,
+    }));
+    moduleFetchError = fallback.error;
+  }
+  if (moduleFetchError) throw moduleFetchError;
+  if (policyFetchError) throw policyFetchError;
+  if (ensureTemplate && !(modules || []).length) {
+    await seedTemplate(companyId);
+    return fetchOrgDashboard(companyId, { includeHidden });
+  }
+  return (modules || []).map((m) => ({
+    id: m.id,
+    name: m.name,
+    slug: slugify(m.name),
+    description: m.description || "",
+    image_url: m.image_url || "",
+    is_hidden: m.is_hidden === true,
+    policies: (policies || [])
+      .filter((p) => p.module_id === m.id)
+      .map((p) => ({ id: p.id, name: p.name, is_hidden: p.is_hidden === true })),
+  }));
+};
+
+const normalizeLookup = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const baseLookupTokens = (value = "") => {
+  const stopWords = new Set([
+    "a",
+    "an",
+    "and",
+    "all",
+    "are",
+    "can",
+    "do",
+    "does",
+    "find",
+    "for",
+    "from",
+    "has",
+    "have",
+    "i",
+    "in",
+    "is",
+    "it",
+    "me",
+    "of",
+    "on",
+    "policy",
+    "policies",
+    "show",
+    "any",
+    "the",
+    "there",
+    "this",
+    "tile",
+    "to",
+    "what",
+    "where",
+    "which",
+    "with",
+  ]);
+  return normalizeLookup(value)
+    .split(/\s+/)
+    .map((token) => token.replace(/ies$/, "y").replace(/s$/, ""))
+    .filter((token) => token.length > 2 && !stopWords.has(token));
+};
+
+const lookupTokens = (value = "") => {
+  return baseLookupTokens(expandHrTerms(normalizeLookup(value)));
+};
+
+const expandHrTerms = (value = "") => {
+  const expansions = [
+    [/sick|illness|ill|medical leave|casual leave|earned leave|paid leave|leave|absent|absence|attendance|holiday|vacation/g, " leave attendance holiday time away"],
+    [/work from home|wfh|remote work|remote|hybrid/g, " attendance employment work arrangement"],
+    [/fire|safety|accident|hazard|emergency/g, " safety health fire accident"],
+    [/salary|pay|wage|compensation|bonus|benefit|loan|gratuity|lta|pension/g, " pay compensation benefits salary"],
+    [/training|learning|performance|appraisal|review/g, " learning performance training"],
+    [/recruit|onboard|joining|intern|trainee|employment|contract/g, " life work employment onboarding"],
+    [/posh|harassment|conduct|conflict|whistle|ethic|insider|relative|marriage/g, " conduct ethics posh conflict"],
+    [/internet|phone|telephone|fuel|car|book|periodical|reimburse|allowance/g, " tools allowance reimbursement"],
+  ];
+  return expansions.reduce((text, [pattern, replacement]) => text.replace(pattern, (match) => `${match} ${replacement}`), value);
+};
+
+const formatModulePolicies = (module) => {
+  const policies = module.policies || [];
+  if (!policies.length) return `${module.name}: no policies are listed yet.`;
+  return `${module.name}: ${policies.map((policy) => policy.name).join(", ")}`;
+};
+
+const getPolicyStats = async ({ companyId, modules }) => {
+  const policyIds = modules.flatMap((module) => (module.policies || []).map((policy) => policy.id)).filter(Boolean);
+  if (!policyIds.length) return { total: 0, uploaded: 0, pending: 0 };
+  const { data, error } = await supabase
+    .from("policy_documents")
+    .select("policy_id")
+    .eq("company_id", companyId)
+    .in("policy_id", policyIds);
+  if (error) {
+    console.error("Policy stats lookup failed:", error);
+    return { total: policyIds.length, uploaded: 0, pending: policyIds.length };
+  }
+  const uploaded = new Set((data || []).map((row) => row.policy_id).filter(Boolean)).size;
+  return { total: policyIds.length, uploaded, pending: Math.max(policyIds.length - uploaded, 0) };
+};
+
+const classifyQuestionContext = (question = "") => {
+  const normalized = normalizeLookup(question);
+  const checks = [
+    { intent: "navigation", pattern: /\b(where|find|located|open|go to|which tile|which module)\b/ },
+    { intent: "policy_count", pattern: /\b(how many|count|number of).*\b(policy|policies|uploaded|pending)\b|\b(policy|policies|uploaded|pending).*\b(how many|count|number of)\b/ },
+    { intent: "policy_listing", pattern: /\b(list|which|what|show|all).*\b(policy|policies|module|modules|tile|tiles)\b|\b(policy|policies|module|modules|tile|tiles).*\b(list|which|what|show|all)\b/ },
+    { intent: "entitlement", pattern: /\b(eligible|eligibility|entitled|entitlement|get|allowed|available|any|have|benefit|leave)\b/ },
+    { intent: "procedure", pattern: /\b(how|process|steps|apply|request|submit|approve|approval|claim|do i|what should)\b/ },
+    { intent: "reimbursement", pattern: /\b(reimburse|reimbursement|claim|allowance|bill|expense|internet|phone|telephone|fuel|car|book|periodical)\b/ },
+    { intent: "conduct_compliance", pattern: /\b(posh|harassment|conduct|conflict|whistle|insider|ethic|compliance|relative|marriage)\b/ },
+    { intent: "definition", pattern: /\b(what is|meaning|define|definition)\b/ },
+  ];
+  return checks.find((check) => check.pattern.test(normalized))?.intent || "unknown";
+};
+
+const contextHintForIntent = (intent) => {
+  const hints = {
+    entitlement: "Look for eligibility, limits, entitlement, conditions, and exceptions. Do not treat nearby leave types as proof of the requested leave type unless it is explicitly mentioned.",
+    procedure: "Look for process steps, approval flow, required documents, timelines, and who the employee must contact.",
+    reimbursement: "Look for allowance, reimbursement, claim limits, required bills, eligibility, and submission process.",
+    conduct_compliance: "Look for rules, prohibited behavior, reporting path, investigation process, and disciplinary consequences.",
+    definition: "Look for definitions or terms explained in the policy text.",
+    navigation: "Answer using dashboard/module/policy location only.",
+    policy_listing: "Answer using the module and policy list only.",
+    unknown: "Answer from policy text when available. If unclear, state what was checked and ask HR to confirm.",
+  };
+  return hints[intent] || hints.unknown;
+};
+
+const findClosestPolicyArea = (question, modules = []) => {
+  const rawTokens = baseLookupTokens(question);
+  const expandedTokens = lookupTokens(question);
+  if (!expandedTokens.length) return null;
+
+  return modules
+    .flatMap((module) =>
+      (module.policies || []).map((policy) => {
+        const haystackTokens = lookupTokens(`${module.name} ${module.description || ""} ${policy.name}`);
+        const haystack = haystackTokens.join(" ");
+        const rawScore = rawTokens.reduce((sum, token) => {
+          if (haystackTokens.includes(token)) return sum + 4;
+          if (haystack.includes(token)) return sum + 2;
+          return sum;
+        }, 0);
+        const hintScore = expandedTokens.reduce((sum, token) => {
+          if (rawTokens.includes(token)) return sum;
+          if (haystackTokens.includes(token)) return sum + 1;
+          if (haystack.includes(token)) return sum + 0.5;
+          return sum;
+        }, 0);
+        return { module, policy, score: rawScore + hintScore, rawScore, hintScore };
+      })
+    )
+    .sort((a, b) => b.score - a.score)[0] || null;
+};
+
+const findClosestPolicyAreas = (question, modules = [], limit = 3) => {
+  const rawTokens = baseLookupTokens(question);
+  const expandedTokens = lookupTokens(question);
+  if (!expandedTokens.length) return [];
+
+  return modules
+    .flatMap((module) =>
+      (module.policies || []).map((policy) => {
+        const haystackTokens = lookupTokens(`${module.name} ${module.description || ""} ${policy.name}`);
+        const haystack = haystackTokens.join(" ");
+        const rawScore = rawTokens.reduce((sum, token) => {
+          if (haystackTokens.includes(token)) return sum + 4;
+          if (haystack.includes(token)) return sum + 2;
+          return sum;
+        }, 0);
+        const hintScore = expandedTokens.reduce((sum, token) => {
+          if (rawTokens.includes(token)) return sum;
+          if (haystackTokens.includes(token)) return sum + 1;
+          if (haystack.includes(token)) return sum + 0.5;
+          return sum;
+        }, 0);
+        return { module, policy, score: rawScore + hintScore, rawScore, hintScore };
+      })
+    )
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+};
+
+const findPolicyForMatch = (modules, policyId) =>
+  modules
+    .flatMap((module) => (module.policies || []).map((policy) => ({ module, policy })))
+    .find((entry) => entry.policy.id === policyId) || null;
+
+const summarizeMatchedPolicyAreas = (matches = [], modules = []) => {
+  const counts = new Map();
+  matches.slice(0, 8).forEach((match) => {
+    const entry = findPolicyForMatch(modules, match.policy_id);
+    if (!entry) return;
+    const key = `${entry.module.name} > ${entry.policy.name}`;
+    const current = counts.get(key) || { path: key, count: 0, best: 0 };
+    current.count += 1;
+    current.best = Math.max(current.best, Number(match.similarity || 0));
+    counts.set(key, current);
+  });
+  return Array.from(counts.values())
+    .sort((a, b) => b.best - a.best || b.count - a.count)
+    .slice(0, 3)
+    .map((item) => `${item.path} (${item.count} match${item.count === 1 ? "" : "es"})`)
+    .join("\n");
+};
+
+const getPolicyDocumentStatus = async ({ companyId, policyId }) => {
+  if (!policyId) return "unknown";
+  const { data, error } = await supabase
+    .from("policy_documents")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("policy_id", policyId)
+    .limit(1);
+  if (error) {
+    console.error("Policy document status lookup failed:", error);
+    return "unknown";
+  }
+  return data?.length ? "uploaded" : "missing";
+};
+
+const buildClosestPolicyFallback = async ({ companyId, question, modules }) => {
+  const closest = findClosestPolicyArea(question, modules);
+  if (!closest || closest.score <= 0) {
+    return "Not in the uploaded policies. Check with HR.";
+  }
+
+  const documentStatus = await getPolicyDocumentStatus({ companyId, policyId: closest.policy.id });
+  if (documentStatus === "missing") {
+    return `Try "${closest.policy.name}" in ${closest.module.name}. Document not uploaded yet.`;
+  }
+  return `Try "${closest.policy.name}" in ${closest.module.name}. Check with HR.`;
+};
+
+const answerLooksMissing = (answer = "") =>
+  /\b(no mention|not mention|does not mention|do not mention|cannot answer|could not find|not included|not specify|not clear|unclear)\b/i.test(answer);
+
+const appendClosestPolicyContext = ({ answer, closestPolicyAreas = [] }) => {
+  if (!answerLooksMissing(answer) || !closestPolicyAreas.length) return answer;
+  const alreadyNamesClosest = closestPolicyAreas.some((entry) => answer.includes(entry.policy.name) || answer.includes(entry.module.name));
+  if (alreadyNamesClosest) return answer;
+  // Single short pointer instead of a multi-area dump.
+  const first = closestPolicyAreas[0];
+  return `${answer} (Try "${first.policy.name}" in ${first.module.name}.)`;
+};
+
+const answerSiteMapQuestion = (question, modules = []) => {
+  const normalized = normalizeLookup(question);
+  const tokens = lookupTokens(question);
+  if (!normalized) return "";
+
+  if (/^(hi|hello|hey|help)$/.test(normalized)) {
+    return "Hi. You can ask me about a policy, where to find a policy, or which policies are inside a tile.";
+  }
+
+  const asksForModules = /\b(module|modules|tile|tiles)\b/.test(normalized);
+  const asksForPolicies = /\b(policy|policies)\b/.test(normalized);
+  const asksForList = /\b(all|list|which|what|show)\b/.test(normalized);
+  const asksWhere = /\b(where|find|located|which tile|which module)\b/.test(normalized);
+
+  if (asksForModules && asksForList && !tokens.length) {
+    return `The dashboard has these tiles: ${modules.map((module) => module.name).join(", ")}.`;
+  }
+
+  const moduleMatch = modules
+    .map((module) => {
+      const name = normalizeLookup(module.name);
+      const score = tokens.reduce((sum, token) => sum + (name.includes(token) ? 1 : 0), 0);
+      return { module, score };
+    })
+    .sort((a, b) => b.score - a.score)[0];
+
+  if (asksForPolicies && asksForList && !tokens.length) {
+    return modules.map(formatModulePolicies).join("\n");
+  }
+
+  if (asksForPolicies && moduleMatch?.score > 0 && (asksForModules || asksForList)) {
+    return formatModulePolicies(moduleMatch.module);
+  }
+
+  const policyMatch = modules
+    .flatMap((module) =>
+      (module.policies || []).map((policy) => {
+        const name = normalizeLookup(policy.name);
+        const score = tokens.reduce((sum, token) => sum + (name.includes(token) ? 1 : 0), 0);
+        return { module, policy, score };
+      })
+    )
+    .sort((a, b) => b.score - a.score)[0];
+
+  if (asksWhere && policyMatch?.score > 0) {
+    return `You can find "${policyMatch.policy.name}" inside the "${policyMatch.module.name}" tile. Open Dashboard > ${policyMatch.module.name} > ${policyMatch.policy.name}.`;
+  }
+
+  if (asksForPolicies && asksForList && tokens.length && policyMatch?.score > 0) {
+    return `"${policyMatch.policy.name}" is listed inside the "${policyMatch.module.name}" tile.`;
+  }
+
+  return "";
+};
+
+const answerPolicyCountQuestion = async ({ companyId, question, modules }) => {
+  const normalized = normalizeLookup(question);
+  const stats = await getPolicyStats({ companyId, modules });
+  const label = (count) => `${count} ${count === 1 ? "policy" : "policies"}`;
+  if (/\buploaded\b/.test(normalized)) return `${label(stats.uploaded)} uploaded.`;
+  if (/\bpending\b/.test(normalized)) return `${label(stats.pending)} pending upload.`;
+  return `${stats.total} policies are listed. ${stats.uploaded} uploaded, ${stats.pending} pending.`;
+};
+
+const clearPolicyArtifacts = async ({ policyIds, companyId }) => {
+  if (!policyIds.length) return { ok: true };
+  const { data: documents, error: docFetchError } = await supabase
+    .from("policy_documents")
+    .select("id, file_path")
+    .in("policy_id", policyIds)
+    .eq("company_id", companyId);
+  if (docFetchError && docFetchError.code !== "42P01") {
+    console.error("Policy document lookup failed:", docFetchError);
+    return { ok: false, message: "Failed to delete policy documents." };
+  }
+
+  const documentIds = (documents || []).map((doc) => doc.id).filter(Boolean);
+  const filePaths = (documents || []).map((doc) => doc.file_path).filter(Boolean);
+  if (documentIds.length) {
+    const { error: chunkDeleteError } = await supabase.from("policy_chunks").delete().in("document_id", documentIds);
+    if (chunkDeleteError && chunkDeleteError.code !== "42P01") {
+      console.error("Policy chunk cleanup failed:", chunkDeleteError);
+      return { ok: false, message: "Failed to delete policy chunks." };
+    }
+  }
+  if (filePaths.length) {
+    const { error: storageError } = await supabase.storage.from("policy-files").remove(filePaths);
+    if (storageError) {
+      console.error("Policy file cleanup failed:", storageError);
+      return { ok: false, message: "Failed to delete stored policy files." };
+    }
+  }
+  const { error: docDeleteError } = await supabase
+    .from("policy_documents")
+    .delete()
+    .in("policy_id", policyIds)
+    .eq("company_id", companyId);
+  if (docDeleteError && docDeleteError.code !== "42P01") {
+    console.error("Policy document cleanup failed:", docDeleteError);
+    return { ok: false, message: "Failed to delete policy documents." };
+  }
+  return { ok: true };
+};
+
+// Called by the rail dashboard on the subdomain. Uses req.company set by the
+// subdomain middleware — no org id in the URL.
+app.get("/api/org/policies", requireOrgAccess, async (req, res) => {
+  try {
+    let company = req.company || req.session.user.selectedCompany || null;
+    if (!company || company.id !== req.orgCompanyId) {
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id, name, slug")
+        .eq("id", req.orgCompanyId)
+        .maybeSingle();
+      if (error) throw error;
+      company = data;
+    }
+    if (!company) return res.status(404).send("Organization not found.");
+    const modules = await fetchOrgDashboard(req.orgCompanyId, {
+      ensureTemplate: true,
+      includeHidden: req.query.include_hidden === "1",
+    });
+    return res.json({ org: company, modules });
+  } catch (error) {
+    console.error("Fetch org dashboard failed:", error);
+    return res.status(500).send(IS_PRODUCTION ? "Failed to load organization policies." : error.message || "Failed to load organization policies.");
+  }
+});
+
+// Legacy super-admin path (still used by orgs.html preview etc. if we want it).
+app.get("/api/admin/orgs/:id/policies", requireSuperAdmin, async (req, res) => {
+  const orgId = req.params.id;
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select("id, name, slug")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (companyError || !company) return res.status(404).send("Organization not found.");
+  const modules = await fetchOrgDashboard(orgId);
+  return res.json({ org: company, modules });
+});
+
+app.post("/api/org/modules", requireOrgManager, async (req, res) => {
+  const name = sanitizeText(req.body?.name || "");
+  const description = sanitizeText(req.body?.description || "");
+  const imageUrl = sanitizeText(req.body?.image_url || "");
+  if (!name) return res.status(400).send("Module name is required.");
+
+  const { data: existing } = await supabase
+    .from("org_modules")
+    .select("position")
+    .eq("company_id", req.orgCompanyId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const position = Number(existing?.[0]?.position || 0) + 1;
+
+  let { data, error } = await supabase
+    .from("org_modules")
+    .insert({
+      company_id: req.orgCompanyId,
+      name,
+      slug: slugify(name),
+      description,
+      image_url: imageUrl || null,
+      position,
+    })
+    .select("id, name, slug, description, image_url, position")
+    .single();
+  if (error && isMissingColumnError(error)) {
+    const fallback = await supabase
+      .from("org_modules")
+      .insert({
+        company_id: req.orgCompanyId,
+        name,
+        slug: slugify(name),
+        position,
+      })
+      .select("id, name, slug, position")
+      .single();
+    data = fallback.data ? { ...fallback.data, description: "", image_url: "" } : fallback.data;
+    error = fallback.error;
+  }
+  if (error) {
+    console.error("Create module failed:", error);
+    return res.status(500).send(error.message || "Failed to create module.");
+  }
+  return res.status(201).json(data);
+});
+
+app.patch("/api/org/modules/:id", requireOrgManager, async (req, res) => {
+  const updates = {};
+  if (req.body?.name !== undefined) {
+    const name = sanitizeText(req.body.name);
+    if (!name) return res.status(400).send("Module name is required.");
+    updates.name = name;
+    updates.slug = slugify(name);
+  }
+  if (req.body?.description !== undefined) updates.description = sanitizeText(req.body.description);
+  if (req.body?.image_url !== undefined) updates.image_url = sanitizeText(req.body.image_url) || null;
+  if (req.body?.is_hidden !== undefined) updates.is_hidden = req.body.is_hidden === true;
+  if (!Object.keys(updates).length) return res.status(400).send("No module changes provided.");
+
+  let { data, error } = await supabase
+    .from("org_modules")
+    .update(updates)
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId)
+    .select("id, name, slug, description, image_url, position")
+    .maybeSingle();
+  if (error) {
+    if (isMissingColumnError(error) && (updates.description !== undefined || updates.image_url !== undefined)) {
+      delete updates.description;
+      delete updates.image_url;
+      if (!Object.keys(updates).length) return res.status(400).send("Module details columns are missing. Run server/schema.sql in Supabase first.");
+      const fallback = await supabase
+        .from("org_modules")
+        .update(updates)
+        .eq("id", req.params.id)
+        .eq("company_id", req.orgCompanyId)
+        .select("id, name, slug, position")
+        .maybeSingle();
+      data = fallback.data ? { ...fallback.data, description: "", image_url: "" } : fallback.data;
+      error = fallback.error;
+    }
+    if (isMissingColumnError(error) && req.body?.is_hidden !== undefined) {
+      return res.status(500).send("is_hidden column missing. Run server/schema.sql in Supabase first.");
+    }
+  }
+  if (error) {
+    console.error("Update module failed:", error);
+    return res.status(500).send(error.message || "Failed to update module.");
+  }
+  if (!data) return res.status(404).send("Module not found.");
+  return res.json(data);
+});
+
+app.delete("/api/org/modules/:id", requireOrgManager, async (req, res) => {
+  const { data: policiesForModule, error: policyLookupError } = await supabase
+    .from("org_policies")
+    .select("id")
+    .eq("module_id", req.params.id)
+    .eq("company_id", req.orgCompanyId);
+  if (policyLookupError) {
+    console.error("Module policy lookup failed:", policyLookupError);
+    return res.status(500).send("Failed to delete module.");
+  }
+  const policyIds = (policiesForModule || []).map((policy) => policy.id);
+  if (policyIds.length) {
+    const cleared = await clearPolicyArtifacts({ policyIds, companyId: req.orgCompanyId });
+    if (!cleared.ok) return res.status(500).send(cleared.message);
+  }
+
+  const { error } = await supabase
+    .from("org_modules")
+    .delete()
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId);
+  if (error) {
+    console.error("Delete module failed:", error);
+    return res.status(500).send(error.message || "Failed to delete module.");
+  }
+  return res.json({ ok: true });
+});
+
+app.post("/api/org/modules/:moduleId/policies", requireOrgManager, async (req, res) => {
+  const name = sanitizeText(req.body?.name || "");
+  if (!name) return res.status(400).send("Policy name is required.");
+
+  const { data: moduleRow } = await supabase
+    .from("org_modules")
+    .select("id")
+    .eq("id", req.params.moduleId)
+    .eq("company_id", req.orgCompanyId)
+    .maybeSingle();
+  if (!moduleRow) return res.status(404).send("Module not found.");
+
+  const { data: existing } = await supabase
+    .from("org_policies")
+    .select("position")
+    .eq("module_id", req.params.moduleId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const position = Number(existing?.[0]?.position || 0) + 1;
+
+  const { data, error } = await supabase
+    .from("org_policies")
+    .insert({ company_id: req.orgCompanyId, module_id: req.params.moduleId, name, position })
+    .select("id, module_id, name, position")
+    .single();
+  if (error) {
+    console.error("Create policy failed:", error);
+    return res.status(500).send(error.message || "Failed to create policy.");
+  }
+  return res.status(201).json(data);
+});
+
+app.patch("/api/org/policies/:id", requireOrgManager, async (req, res) => {
+  const updates = {};
+  if (req.body?.name !== undefined) {
+    const name = sanitizeText(req.body.name);
+    if (!name) return res.status(400).send("Policy name is required.");
+    updates.name = name;
+  }
+  if (req.body?.is_hidden !== undefined) {
+    updates.is_hidden = req.body.is_hidden === true;
+  }
+  if (!Object.keys(updates).length) {
+    return res.status(400).send("Nothing to update.");
+  }
+  const { data, error } = await supabase
+    .from("org_policies")
+    .update(updates)
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId)
+    .select("id, module_id, name, position, is_hidden")
+    .maybeSingle();
+  if (error) {
+    if (isMissingColumnError(error) && updates.is_hidden !== undefined) {
+      return res
+        .status(500)
+        .send("is_hidden column missing on org_policies. Run server/schema.sql in Supabase first.");
+    }
+    console.error("Update policy failed:", error);
+    return res.status(500).send(error.message || "Failed to update policy.");
+  }
+  if (!data) return res.status(404).send("Policy not found.");
+  return res.json(data);
+});
+
+app.delete("/api/org/policies/:id", requireOrgManager, async (req, res) => {
+  const cleared = await clearPolicyArtifacts({ policyIds: [req.params.id], companyId: req.orgCompanyId });
+  if (!cleared.ok) return res.status(500).send(cleared.message);
+  const { error } = await supabase
+    .from("org_policies")
+    .delete()
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId);
+  if (error) {
+    console.error("Delete policy failed:", error);
+    return res.status(500).send(error.message || "Failed to delete policy.");
+  }
+  return res.json({ ok: true });
+});
+
+app.get("/api/org/people", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const { data, error } = await supabase
+    .from("org_people")
+    .select("id, email, name, role, status, invited_at, created_at")
+    .eq("company_id", req.orgCompanyId)
+    .eq("role", "employee")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Load people failed:", error);
+    return res.status(500).send("Failed to load people.");
+  }
+  return res.json(data || []);
+});
+
+app.get("/api/org/admins", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  const { data, error } = await supabase
+    .from("org_people")
+    .select("id, email, name, role, status, invited_at, created_at")
+    .eq("company_id", companyId)
+    .eq("role", "admin")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Load org admins failed:", error);
+    return res.status(500).send("Failed to load admins.");
+  }
+  return res.json(data || []);
+});
+
+app.post("/api/org/admins", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  const email = sanitizeEmail(req.body?.email || "");
+  const name = sanitizeText(req.body?.name || "");
+  const sendEmail = req.body?.send_email === true;
+  if (!email || !email.includes("@")) return res.status(400).send("Valid admin email is required.");
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select("id, name, slug")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (companyError) {
+    console.error("Admin org lookup failed:", companyError);
+    return res.status(500).send("Failed to load organization.");
+  }
+  if (!company) return res.status(404).send("Organization not found.");
+
+  let temporaryPassword = generateAccessToken();
+  const payload = {
+    company_id: companyId,
+    email,
+    name,
+    role: "admin",
+    status: "active",
+    password_hash: await bcrypt.hash(temporaryPassword, 10),
+    invited_at: null,
+  };
+
+  let { data, error } = await supabase
+    .from("org_people")
+    .upsert(payload, { onConflict: "company_id,email" })
+    .select("id, email, name, role, status, invited_at, created_at")
+    .single();
+  if (isMissingColumnError(error)) {
+    const { password_hash, ...fallbackPayload } = payload;
+    temporaryPassword = DEFAULT_EMPLOYEE_PASSWORD;
+    const fallback = await supabase
+      .from("org_people")
+      .upsert(fallbackPayload, { onConflict: "company_id,email" })
+      .select("id, email, name, role, status, invited_at, created_at")
+      .single();
+    data = fallback.data;
+    error = fallback.error;
+  }
+  if (error) {
+    console.error("Save org admin failed:", error);
+    return res.status(500).send(error.message || "Failed to save admin.");
+  }
+
+  let emailSent = false;
+  if (sendEmail) {
+    try {
+      await sendOrgAdminInvite({
+        to: email,
+        name,
+        orgName: company.name,
+        orgSlug: company.slug,
+        password: temporaryPassword,
+        req,
+      });
+      emailSent = true;
+      const sentAt = new Date().toISOString();
+      await supabase.from("org_people").update({ invited_at: sentAt }).eq("id", data.id).eq("company_id", companyId);
+      data.invited_at = sentAt;
+    } catch (emailError) {
+      console.error("Admin invite email failed:", emailError);
+      return res.status(201).json({
+        admin: data,
+        temporary_password: temporaryPassword,
+        email_sent: false,
+        email_error: emailError.message || "Email failed.",
+      });
+    }
+  }
+
+  return res.status(201).json({
+    admin: data,
+    temporary_password: temporaryPassword,
+    email_sent: emailSent,
+  });
+});
+
+app.post("/api/org/admins/:id/send-invite", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  const [{ data: company }, { data: admin, error: adminError }] = await Promise.all([
+    supabase.from("companies").select("id, name, slug").eq("id", companyId).maybeSingle(),
+    supabase
+      .from("org_people")
+      .select("id, email, name, role, status")
+      .eq("id", req.params.id)
+      .eq("company_id", companyId)
+      .eq("role", "admin")
+      .maybeSingle(),
+  ]);
+  if (adminError) return res.status(500).send("Failed to load admin.");
+  if (!company || !admin) return res.status(404).send("Admin not found.");
+
+  let temporaryPassword = generateAccessToken();
+  const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+  const { error: passwordError } = await supabase
+    .from("org_people")
+    .update({ password_hash: passwordHash })
+    .eq("id", admin.id)
+    .eq("company_id", companyId);
+  if (isMissingColumnError(passwordError)) {
+    temporaryPassword = DEFAULT_EMPLOYEE_PASSWORD;
+  } else if (passwordError) {
+    return res.status(500).send("Failed to generate admin credentials.");
+  }
+
+  try {
+    await sendOrgAdminInvite({
+      to: admin.email,
+      name: admin.name,
+      orgName: company.name,
+      orgSlug: company.slug,
+      password: temporaryPassword,
+      req,
+    });
+    await supabase
+      .from("org_people")
+      .update({ invited_at: new Date().toISOString(), status: "active" })
+      .eq("id", admin.id)
+      .eq("company_id", companyId);
+    return res.json({ ok: true, email_sent: true });
+  } catch (emailError) {
+    console.error("Admin resend invite failed:", emailError);
+    return res.status(503).json({ email_error: emailError.message || "Invite email failed." });
+  }
+});
+
+app.patch("/api/org/admins/:id", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  if (req.body?.status !== "active" && req.body?.status !== "disabled") {
+    return res.status(400).send("Invalid admin status.");
+  }
+  const { data, error } = await supabase
+    .from("org_people")
+    .update({ status: req.body.status })
+    .eq("id", req.params.id)
+    .eq("company_id", companyId)
+    .eq("role", "admin")
+    .select("id, email, name, role, status, invited_at, created_at")
+    .maybeSingle();
+  if (error) return res.status(500).send(error.message || "Failed to update admin.");
+  if (!data) return res.status(404).send("Admin not found.");
+  return res.json(data);
+});
+
+app.delete("/api/org/admins/:id", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  const { error } = await supabase
+    .from("org_people")
+    .delete()
+    .eq("id", req.params.id)
+    .eq("company_id", companyId)
+    .eq("role", "admin");
+  if (error) return res.status(500).send(error.message || "Failed to delete admin.");
+  return res.json({ ok: true });
+});
+
+app.post("/api/org/people", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const rows = Array.isArray(req.body?.people) ? req.body.people : [req.body || {}];
+
+  const { data: companyRow } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("id", req.orgCompanyId)
+    .maybeSingle();
+  const isHrmsMode = (companyRow?.access_mode || "standalone") === "hrms_link";
+
+  const payload = rows
+    .map((row) => ({
+      company_id: req.orgCompanyId,
+      email: sanitizeEmail(row.email),
+      name: sanitizeText(row.name || ""),
+      role: "employee",
+      status: row.status === "draft" || row.status === "invited" ? row.status : "active",
+      invited_at: row.status === "invited" ? new Date().toISOString() : null,
+    }))
+    .filter((row) => row.email && row.email.includes("@"));
+  if (!payload.length) return res.status(400).send("At least one valid email is required.");
+
+  const { data, error } = await supabase
+    .from("org_people")
+    .upsert(payload, { onConflict: "company_id,email" })
+    .select("id, email, name, role, status, invited_at, created_at");
+  if (error) {
+    console.error("Save people failed:", error);
+    return res.status(500).send(error.message || "Failed to save people.");
+  }
+
+  // In HRMS mode no email goes out — the HRMS owns the entry path.
+  if (isHrmsMode) {
+    return res.status(201).json((data || []).map((row) => ({ ...row, email_sent: false })));
+  }
+
+  // Standalone mode: send a 7-day invite link to each newly-added employee.
+  // If SMTP isn't configured the response surfaces dev_link so the admin can
+  // copy-paste it manually.
+  const orgName = companyRow?.name || "Your organization";
+  const orgSlug = companyRow?.slug || "";
+  const responseRows = await Promise.all(
+    (data || []).map(async (row) => {
+      try {
+        const { linkUrl } = await sendMagicLink({
+          companyId: req.orgCompanyId,
+          orgName,
+          orgSlug,
+          to: row.email,
+          name: row.name,
+          kind: "invite",
+          req,
+          res,
+        });
+        await supabase
+          .from("org_people")
+          .update({ invited_at: new Date().toISOString() })
+          .eq("id", row.id)
+          .eq("company_id", req.orgCompanyId);
+        return {
+          ...row,
+          email_sent: true,
+          ...(IS_PRODUCTION ? {} : { dev_link: linkUrl }),
+        };
+      } catch (emailError) {
+        console.error("Employee invite email failed:", emailError);
+        return {
+          ...row,
+          email_sent: false,
+          email_error: emailError.message || "Invite email failed. SMTP may not be configured.",
+        };
+      }
+    })
+  );
+  return res.status(201).json(responseRows);
+});
+
+app.patch("/api/org/people/:id", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const updates = {};
+  if (req.body?.name !== undefined) updates.name = sanitizeText(req.body.name);
+  if (req.body?.email !== undefined) updates.email = sanitizeEmail(req.body.email);
+  if (req.body?.status !== undefined) {
+    const allowed = new Set(["draft", "invited", "active", "disabled"]);
+    if (!allowed.has(req.body.status)) return res.status(400).send("Invalid status.");
+    updates.status = req.body.status;
+    if (req.body.status === "invited") updates.invited_at = new Date().toISOString();
+  }
+  if (!Object.keys(updates).length) return res.status(400).send("No person changes provided.");
+
+  const { data, error } = await supabase
+    .from("org_people")
+    .update(updates)
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId)
+    .eq("role", "employee")
+    .select("id, email, name, role, status, invited_at, created_at")
+    .maybeSingle();
+  if (error) {
+    console.error("Update person failed:", error);
+    return res.status(500).send(error.message || "Failed to update person.");
+  }
+  if (!data) return res.status(404).send("Person not found.");
+  return res.json(data);
+});
+
+app.delete("/api/org/people/:id", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const { error } = await supabase
+    .from("org_people")
+    .delete()
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId)
+    .eq("role", "employee");
+  if (error) {
+    console.error("Delete person failed:", error);
+    return res.status(500).send(error.message || "Failed to delete person.");
+  }
+  return res.json({ ok: true });
+});
+
+// Send a fresh magic link to a person — used by admins when an invite is
+// lost or expired. Standalone-mode only.
+app.post("/api/org/people/:id/resend-invite", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const [{ data: existing, error: lookupError }, { data: company }] = await Promise.all([
+    supabase
+      .from("org_people")
+      .select("id, email, name, role")
+      .eq("id", req.params.id)
+      .eq("company_id", req.orgCompanyId)
+      .maybeSingle(),
+    supabase.from("companies").select("id, name, slug").eq("id", req.orgCompanyId).maybeSingle(),
+  ]);
+  if (lookupError) {
+    console.error("Resend lookup failed:", lookupError);
+    return res.status(500).send("Failed to look up person.");
+  }
+  if (!existing) return res.status(404).send("Person not found.");
+
+  try {
+    const { linkUrl } = await sendMagicLink({
+      companyId: req.orgCompanyId,
+      orgName: company?.name || "Your organization",
+      orgSlug: company?.slug || "",
+      to: existing.email,
+      name: existing.name,
+      kind: "invite",
+      req,
+      res,
+    });
+    await supabase
+      .from("org_people")
+      .update({ invited_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .eq("company_id", req.orgCompanyId);
+    return res.json({
+      ok: true,
+      email: existing.email,
+      email_sent: true,
+      ...(IS_PRODUCTION ? {} : { dev_link: linkUrl }),
+    });
+  } catch (err) {
+    console.error("Resend invite failed:", err);
+    return res.status(500).json({
+      ok: false,
+      email_sent: false,
+      email_error: err.message || "Invite email failed.",
+    });
+  }
+});
+
+// Org-level settings (currently just access_mode). Falls back to 'standalone'
+// if the access_mode column from schema.sql hasn't been applied yet.
+const VALID_ACCESS_MODES = new Set(["standalone", "hrms_link"]);
+
+app.get("/api/org/settings", requireOrgManager, async (req, res) => {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("access_mode")
+    .eq("id", req.orgCompanyId)
+    .maybeSingle();
+  if (error && !isMissingColumnError(error)) {
+    console.error("Load settings failed:", error);
+    return res.status(500).send("Failed to load settings.");
+  }
+  return res.json({ access_mode: data?.access_mode || "standalone" });
+});
+
+app.patch("/api/org/settings", requireOrgManager, async (req, res) => {
+  const mode = sanitizeText(req.body?.access_mode || "");
+  if (!VALID_ACCESS_MODES.has(mode)) {
+    return res.status(400).send("Invalid access_mode.");
+  }
+  const { error } = await supabase
+    .from("companies")
+    .update({ access_mode: mode })
+    .eq("id", req.orgCompanyId);
+  if (error) {
+    if (isMissingColumnError(error)) {
+      return res
+        .status(500)
+        .send("access_mode column missing. Run server/schema.sql in Supabase first.");
+    }
+    console.error("Update settings failed:", error);
+    return res.status(500).send(error.message || "Failed to update settings.");
+  }
+  return res.json({ access_mode: mode });
+});
+
+app.get("/api/org/hrms-launch-config", requireOrgManager, async (req, res) => {
+  const { data: company, error } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("id", req.orgCompanyId)
+    .maybeSingle();
+  if (error) {
+    console.error("Load HRMS launch config failed:", error);
+    return res.status(500).send("Failed to load HRMS launch config.");
+  }
+  if (!company) return res.status(404).send("Organization not found.");
+  const settings = await getOrgHrmsSettings(company.id);
+  const secret = settings?.launch_secret || HRMS_LAUNCH_SECRET || "";
+  return res.json({
+    org: { name: company.name, slug: company.slug, access_mode: company.access_mode || "standalone" },
+    launch_path: "/api/hrms/launch",
+    launch_url_template: buildHrmsLaunchTemplate({ req, company, secret }),
+    secret_configured: Boolean(secret),
+    enabled: settings?.enabled === true,
+    allowed_origin: settings?.allowed_origin || "",
+  });
+});
+
+app.get("/api/org/hrms-settings", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  const { data: company, error } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (error) return res.status(500).send("Failed to load organization.");
+  if (!company) return res.status(404).send("Organization not found.");
+  const settings = await getOrgHrmsSettings(companyId);
+  const secret = settings?.launch_secret || "";
+  return res.json({
+    org: company,
+    enabled: settings?.enabled === true,
+    allowed_origin: settings?.allowed_origin || "",
+    launch_secret: secret,
+    secret_present: Boolean(secret),
+    last_rotated_at: settings?.last_rotated_at || null,
+    updated_at: settings?.updated_at || null,
+    launch_path: "/api/hrms/launch",
+    launch_url_template: buildHrmsLaunchTemplate({ req, company, secret }),
+  });
+});
+
+app.put("/api/org/hrms-settings", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  const enabled = req.body?.enabled === true;
+  const allowedOrigin = normalizeOrigin(req.body?.allowed_origin || "");
+  if (enabled && !allowedOrigin) return res.status(400).send("A valid HRMS iframe origin is required.");
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (companyError) return res.status(500).send("Failed to load organization.");
+  if (!company) return res.status(404).send("Organization not found.");
+
+  const existing = await getOrgHrmsSettings(companyId);
+  const now = new Date().toISOString();
+  const launchSecret = existing?.launch_secret || generateHrmsSecret();
+  const [{ error: settingsError }, { error: companyUpdateError }] = await Promise.all([
+    supabase.from("org_hrms_settings").upsert(
+      {
+        company_id: companyId,
+        enabled,
+        allowed_origin: allowedOrigin,
+        launch_secret: launchSecret,
+        last_rotated_at: existing?.last_rotated_at || now,
+        updated_at: now,
+      },
+      { onConflict: "company_id" }
+    ),
+    supabase
+      .from("companies")
+      .update({ access_mode: enabled ? "hrms_link" : "standalone" })
+      .eq("id", companyId),
+  ]);
+  if (settingsError || companyUpdateError) {
+    console.error("Save HRMS settings failed:", settingsError || companyUpdateError);
+    return res.status(500).send("Failed to save HRMS settings. Run server/schema.sql if this database is not migrated.");
+  }
+  company.access_mode = enabled ? "hrms_link" : "standalone";
+  return res.json({
+    org: company,
+    enabled,
+    allowed_origin: allowedOrigin,
+    launch_secret: launchSecret,
+    secret_present: true,
+    last_rotated_at: existing?.last_rotated_at || now,
+    updated_at: now,
+    launch_path: "/api/hrms/launch",
+    launch_url_template: buildHrmsLaunchTemplate({ req, company, secret: launchSecret }),
+  });
+});
+
+app.post("/api/org/hrms-settings/rotate", requireSuperAdmin, async (req, res) => {
+  const companyId = resolveRequestCompanyId(req);
+  if (!companyId) return res.status(400).send("Organization context is required.");
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (companyError) return res.status(500).send("Failed to load organization.");
+  if (!company) return res.status(404).send("Organization not found.");
+  const existing = await getOrgHrmsSettings(companyId);
+  const now = new Date().toISOString();
+  const launchSecret = generateHrmsSecret();
+  const { error } = await supabase.from("org_hrms_settings").upsert(
+    {
+      company_id: companyId,
+      enabled: existing?.enabled === true,
+      allowed_origin: existing?.allowed_origin || "",
+      launch_secret: launchSecret,
+      last_rotated_at: now,
+      updated_at: now,
+    },
+    { onConflict: "company_id" }
+  );
+  if (error) return res.status(500).send("Failed to rotate HRMS secret.");
+  return res.json({
+    org: company,
+    enabled: existing?.enabled === true,
+    allowed_origin: existing?.allowed_origin || "",
+    launch_secret: launchSecret,
+    secret_present: true,
+    last_rotated_at: now,
+    updated_at: now,
+    launch_path: "/api/hrms/launch",
+    launch_url_template: buildHrmsLaunchTemplate({ req, company, secret: launchSecret }),
+  });
+});
+
+// Validator for the HRMS team: post the params + signature you generated, get
+// back exactly which check failed. Does NOT create a session, does NOT redirect.
+// Rate-limited (login limiter) so it can't be used for offline signature
+// brute-force.
+app.post("/api/hrms/test", loginLimiter, async (req, res) => {
+  const reasons = [];
+
+  const org = slugify(req.body?.org || "");
+  const email = sanitizeEmail(req.body?.email || "");
+  const name = sanitizeText(req.body?.name || "");
+  const role = req.body?.role === "admin" ? "admin" : "employee";
+  const externalId = sanitizeText(req.body?.external_id || "");
+  const exp = Number(req.body?.exp || 0);
+  const sig = String(req.body?.sig || "").trim();
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!org) reasons.push("missing/invalid org");
+  if (!email) reasons.push("missing/invalid email");
+  if (!exp) reasons.push("missing exp");
+  else if (exp < now) reasons.push(`exp is in the past (server time ${now}, exp ${exp})`);
+  else if (exp > now + 60 * 15) reasons.push(`exp is more than 15 min from now (server time ${now}, exp ${exp})`);
+  if (!sig) reasons.push("missing sig");
+
+  let org_status = null;
+  let secret = "";
+  let expected = "";
+  if (org) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id, name, slug, access_mode")
+      .eq("slug", org)
+      .maybeSingle();
+    if (!company) {
+      reasons.push(`org slug "${org}" does not exist`);
+      org_status = "not_found";
+    } else if ((company.access_mode || "standalone") !== "hrms_link") {
+      reasons.push(`org "${org}" is not in hrms_link mode (current: ${company.access_mode || "standalone"})`);
+      org_status = "wrong_mode";
+    } else {
+      const settings = await getOrgHrmsSettings(company.id);
+      if (!settings?.enabled) reasons.push(`org "${org}" HRMS settings are not enabled`);
+      secret = settings?.launch_secret || HRMS_LAUNCH_SECRET || "";
+      if (!secret) reasons.push(`org "${org}" launch secret is not configured`);
+      org_status = "ok";
+    }
+  }
+
+  const canonical = buildHrmsCanonicalPayload({ org, email, name, role, exp, externalId });
+  expected = secret ? signHrmsLaunch(canonical, secret) : "";
+  if (sig && expected && !safeEqualHex(sig, expected)) {
+    reasons.push("signature mismatch — check your secret and canonical string");
+  }
+
+  return res.json({
+    ok: reasons.length === 0,
+    server_time_unix: now,
+    canonical_string: canonical,
+    expected_signature: expected || "(secret not configured)",
+    your_signature: sig,
+    org_status,
+    failures: reasons,
+  });
+});
+
+app.get("/api/hrms/launch", async (req, res) => {
+  const org = slugify(req.query.org || req.company?.slug || "");
+  const email = sanitizeEmail(req.query.email || "");
+  const name = sanitizeText(req.query.name || "");
+  const role = req.query.role === "admin" ? "admin" : "employee";
+  const externalId = sanitizeText(req.query.external_id || "");
+  const exp = Number(req.query.exp || 0);
+  const sig = String(req.query.sig || "").trim();
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!org || !email || !exp || !sig) {
+    return res.status(400).send("Missing HRMS launch parameters.");
+  }
+  if (exp < now) {
+    return res.status(401).send("HRMS launch link expired.");
+  }
+  if (exp > now + 60 * 15) {
+    return res.status(400).send("HRMS launch expiry is too long.");
+  }
+
+  const { data: company, error } = await supabase
+    .from("companies")
+    .select("id, name, slug, access_mode")
+    .eq("slug", org)
+    .maybeSingle();
+  if (error) {
+    console.error("HRMS launch org lookup failed:", error);
+    return res.status(500).send("Unable to verify organization.");
+  }
+  if (!company) return res.status(404).send("Organization not found.");
+  if ((company.access_mode || "standalone") !== "hrms_link") {
+    return res.status(403).send("HRMS launch is not enabled for this organization.");
+  }
+
+  const settings = await getOrgHrmsSettings(company.id);
+  if (!settings?.enabled) return res.status(403).send("HRMS launch is not enabled for this organization.");
+  const secret = settings.launch_secret || HRMS_LAUNCH_SECRET || "";
+  if (!secret) return res.status(500).send("HRMS launch secret is not configured.");
+  const allowedOrigin = normalizeOrigin(settings.allowed_origin || "");
+  if (allowedOrigin) {
+    res.setHeader("Content-Security-Policy", `frame-ancestors 'self' ${allowedOrigin}`);
+  }
+
+  const canonical = buildHrmsCanonicalPayload({ org, email, name, role, exp, externalId });
+  const expected = signHrmsLaunch(canonical, secret);
+  if (!safeEqualHex(sig, expected)) {
+    return res.status(401).send("Invalid HRMS launch signature.");
+  }
+
+  req.session.user = {
+    id: `hrms:${company.id}:${externalId || email}`,
+    email,
+    name: name || email,
+    role,
+    companyId: company.id,
+    authSource: "hrms",
+    externalId: externalId || null,
+    selectedCompany: company,
+  };
+  req.session.user.selectedCompany = company;
+
+  return res.redirect(303, "/policies.html");
+});
+
+app.get("/api/org/email-settings", requireOrgManager, async (req, res) => {
+  const [{ data: smtp }, { data: draft }] = await Promise.all([
+    supabase
+      .from("org_smtp_settings")
+      .select("host, port, username, from_email, from_name, updated_at")
+      .eq("company_id", req.orgCompanyId)
+      .maybeSingle(),
+    supabase
+      .from("org_email_drafts")
+      .select("subject, body, updated_at")
+      .eq("company_id", req.orgCompanyId)
+      .maybeSingle(),
+  ]);
+  return res.json({ smtp: smtp || {}, draft: draft || {} });
+});
+
+app.put("/api/org/email-settings", requireOrgManager, async (req, res) => {
+  const smtp = req.body?.smtp || {};
+  const draft = req.body?.draft || {};
+  const now = new Date().toISOString();
+  const smtpPayload = {
+    company_id: req.orgCompanyId,
+    host: sanitizeText(smtp.host || ""),
+    port: Number(smtp.port || 0) || null,
+    username: sanitizeText(smtp.username || ""),
+    password: smtp.password === undefined ? undefined : String(smtp.password || ""),
+    from_email: sanitizeEmail(smtp.from_email || ""),
+    from_name: sanitizeText(smtp.from_name || ""),
+    updated_at: now,
+  };
+  if (smtp.password === undefined) delete smtpPayload.password;
+
+  const draftPayload = {
+    company_id: req.orgCompanyId,
+    subject: sanitizeText(draft.subject || "You have been invited to the policy portal"),
+    body: String(draft.body || "Hello {{name}}, you have been added to the {{organization}} policy portal.").trim(),
+    updated_at: now,
+  };
+
+  const [{ error: smtpError }, { error: draftError }] = await Promise.all([
+    supabase.from("org_smtp_settings").upsert(smtpPayload, { onConflict: "company_id" }),
+    supabase.from("org_email_drafts").upsert(draftPayload, { onConflict: "company_id" }),
+  ]);
+  if (smtpError || draftError) {
+    console.error("Save email settings failed:", smtpError || draftError);
+    return res.status(500).send("Failed to save email settings.");
+  }
+  return res.json({ ok: true });
 });
 
 app.delete("/api/admin/orgs/:id", requireSuperAdmin, async (req, res) => {
   const orgId = req.params.id;
+
+  // Tables that reference companies but don't have ON DELETE CASCADE:
+  // legacy user_profiles + policy_documents/chunks. Wipe their rows first
+  // so the company delete doesn't trip on a foreign-key constraint.
+  // (org_modules and org_policies already cascade.)
+  for (const table of ["user_profiles", "policy_chunks", "policy_documents"]) {
+    const { error: clearError } = await supabase.from(table).delete().eq("company_id", orgId);
+    if (clearError && clearError.code !== "42P01") {
+      // 42P01 = "relation does not exist" — fine, table may not be present.
+      console.error(`Cleanup of ${table} failed:`, clearError);
+      return res.status(500).send(`Failed to delete organization (${table}).`);
+    }
+  }
+
   const { error } = await supabase.from("companies").delete().eq("id", orgId);
   if (error) {
     console.error("Delete org failed:", error);
@@ -268,20 +2626,59 @@ app.get("/api/session", (req, res) => {
   return res.json(req.session.user);
 });
 
+// Public, no-auth lightweight context used by the login page to decide which
+// flow to render. The server is the authority on subdomain/root because it
+// runs the Host-header → company resolution. Trying to infer this on the
+// client from `window.location.hostname` is fragile across deployments.
+app.get("/api/auth/context", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const isHrmsOrg = req.company && (req.company.access_mode || "standalone") === "hrms_link";
+  return res.json({
+    // hrms_only = the page should not offer email-login at all; the only
+    // valid entry is a signed HRMS launch.
+    mode: !req.company ? "password" : isHrmsOrg ? "hrms_only" : "magic",
+    org: req.company ? { name: req.company.name, slug: req.company.slug } : null,
+  });
+});
+
+app.get("/api/org/access", requireOrgAccess, (req, res) => {
+  return res.json({ ok: true, role: req.session.user.role, company_id: req.orgCompanyId });
+});
+
 app.post("/api/logout", (req, res) => {
   req.session.destroy(() => {
     res.json({ ok: true });
   });
 });
 
-app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
+app.post("/api/upload", uploadLimiter, requireOrgManager, upload.single("file"), async (req, res) => {
   const { policyId } = req.body || {};
+  const displayName = sanitizeText(req.body?.displayName || "");
   const file = req.file;
   if (!policyId) {
     return res.status(400).send("Missing policy ID.");
   }
   if (!file) {
     return res.status(400).send("Missing file.");
+  }
+  const fileValidationError = validatePolicyUpload(file);
+  if (fileValidationError) {
+    return res.status(400).send(fileValidationError);
+  }
+
+  const { data: policyRow } = await supabase
+    .from("org_policies")
+    .select("id")
+    .eq("id", policyId)
+    .eq("company_id", req.orgCompanyId)
+    .maybeSingle();
+  if (!policyRow) return res.status(404).send("Policy not found.");
+
+  // Each upload replaces the previous file for this policy: wipe prior
+  // document rows, their chunks, and the storage object before inserting.
+  const cleared = await clearPolicyArtifacts({ policyIds: [policyId], companyId: req.orgCompanyId });
+  if (!cleared.ok) {
+    return res.status(500).send(cleared.message || "Failed to replace previous file.");
   }
 
   const timestamp = Date.now();
@@ -303,8 +2700,9 @@ app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) =>
     .insert({
       policy_id: policyId,
       file_path: storedPath,
-      uploaded_by: req.session.user.id,
-      company_id: req.session.user.companyId,
+      display_name: displayName || file.originalname,
+      uploaded_by: isUuid(req.session.user.id) ? req.session.user.id : null,
+      company_id: req.orgCompanyId,
     })
     .select("id")
     .single();
@@ -315,32 +2713,13 @@ app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) =>
   }
 
   try {
-    const extracted = sanitizeText(await extractTextFromFile(file));
-    if (extracted) {
-      const chunks = chunkText(extracted);
-      const EMBED_CONCURRENCY = 5;
-      const embeddings = new Array(chunks.length);
-      for (let i = 0; i < chunks.length; i += EMBED_CONCURRENCY) {
-        const batch = chunks.slice(i, i + EMBED_CONCURRENCY);
-        const results = await Promise.all(batch.map((chunk) => embedText(chunk)));
-        results.forEach((embedding, j) => {
-          embeddings[i + j] = { chunk: batch[j], embedding };
-        });
-      }
-      const payload = embeddings.map(({ chunk, embedding }) => ({
-        policy_id: policyId,
-        company_id: req.session.user.companyId,
-        document_id: documentRow.id,
-        chunk_text: chunk,
-        embedding,
-      }));
-      if (payload.length) {
-        const { error: chunkError } = await supabase.from("policy_chunks").insert(payload);
-        if (chunkError) {
-          console.error("Chunk insert failed:", chunkError);
-        }
-      }
-    }
+    const indexResult = await indexPolicyDocument({
+      policyId,
+      companyId: req.orgCompanyId,
+      documentId: documentRow.id,
+      file,
+    });
+    if (!indexResult.chunks) console.warn("Document indexing skipped:", indexResult.reason || storedPath);
   } catch (error) {
     console.error("Document indexing failed:", error);
   }
@@ -348,7 +2727,54 @@ app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) =>
   return res.json({ filePath: storedPath });
 });
 
-app.get("/api/policy-documents", requireAuth, async (req, res) => {
+app.post("/api/org/reindex-policies", requireOrgManager, async (req, res) => {
+  const { data: documents, error } = await supabase
+    .from("policy_documents")
+    .select("id, policy_id, file_path")
+    .eq("company_id", req.orgCompanyId);
+  if (error) {
+    console.error("Reindex document lookup failed:", error);
+    return res.status(500).send("Failed to load policy documents.");
+  }
+
+  const results = [];
+  for (const doc of documents || []) {
+    try {
+      const { data: blob, error: downloadError } = await supabase.storage
+        .from("policy-files")
+        .download(doc.file_path);
+      if (downloadError) throw downloadError;
+      const buffer = Buffer.from(await blob.arrayBuffer());
+      const result = await indexPolicyDocument({
+        policyId: doc.policy_id,
+        companyId: req.orgCompanyId,
+        documentId: doc.id,
+        file: {
+          buffer,
+          mimetype: inferMimeFromPath(doc.file_path),
+          originalname: doc.file_path.split("/").pop() || "policy-document",
+        },
+      });
+      results.push({ document_id: doc.id, file_path: doc.file_path, ...result });
+    } catch (reindexError) {
+      console.error("Policy reindex failed:", reindexError);
+      results.push({
+        document_id: doc.id,
+        file_path: doc.file_path,
+        chunks: 0,
+        error: reindexError.message || "Reindex failed.",
+      });
+    }
+  }
+
+  return res.json({
+    documents: results.length,
+    chunks: results.reduce((sum, item) => sum + (item.chunks || 0), 0),
+    results,
+  });
+});
+
+app.get("/api/policy-documents", requireOrgAccess, async (req, res) => {
   const policyId = req.query.policyId;
   if (!policyId) {
     return res.status(400).send("Missing policy ID.");
@@ -356,10 +2782,9 @@ app.get("/api/policy-documents", requireAuth, async (req, res) => {
 
   const { data, error } = await supabase
     .from("policy_documents")
-    .select("file_path, uploaded_at")
+    .select("file_path")
     .eq("policy_id", policyId)
-    .eq("company_id", req.session.user.companyId)
-    .order("uploaded_at", { ascending: false });
+    .eq("company_id", req.orgCompanyId);
 
   if (error) {
     console.error("Policy documents fetch failed:", error);
@@ -384,7 +2809,7 @@ app.get("/api/policy-documents", requireAuth, async (req, res) => {
   return res.json(signedFiles);
 });
 
-app.post("/api/policy-documents/delete", requireAdmin, async (req, res) => {
+app.post("/api/policy-documents/delete", requireOrgManager, async (req, res) => {
   const { policyId, filePath } = req.body || {};
   if (!policyId || !filePath) {
     return res.status(400).send("Missing policy ID or file path.");
@@ -395,7 +2820,7 @@ app.post("/api/policy-documents/delete", requireAdmin, async (req, res) => {
     .select("id")
     .eq("policy_id", policyId)
     .eq("file_path", filePath)
-    .eq("company_id", req.session.user.companyId)
+    .eq("company_id", req.orgCompanyId)
     .maybeSingle();
 
   if (documentRow?.id) {
@@ -420,7 +2845,7 @@ app.post("/api/policy-documents/delete", requireAdmin, async (req, res) => {
     .delete()
     .eq("policy_id", policyId)
     .eq("file_path", filePath)
-    .eq("company_id", req.session.user.companyId);
+    .eq("company_id", req.orgCompanyId);
 
   if (deleteError) {
     console.error("Document delete failed:", deleteError);
@@ -430,24 +2855,71 @@ app.post("/api/policy-documents/delete", requireAdmin, async (req, res) => {
   return res.json({ success: true });
 });
 
-app.post("/api/chat", requireAuth, async (req, res) => {
+app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
   const question = sanitizeText(req.body?.question || "");
   if (!question) {
     return res.status(400).send("Question is required.");
   }
-  if (!req.session.user.companyId) {
-    return res.status(400).send("Company not configured.");
+
+  // Daily quota gate. Super-admin is exempt (one user, used for testing).
+  const userId = req.session?.user?.id;
+  const role = req.session?.user?.role;
+  if (role !== "super_admin") {
+    const already = await peekChatUsage(userId);
+    if (already >= CHAT_DAILY_CAP_PER_USER) {
+      return res.status(429).json({
+        error: "daily_limit_reached",
+        message: `You've reached today's limit of ${CHAT_DAILY_CAP_PER_USER} questions. Please come back tomorrow.`,
+        remaining: 0,
+      });
+    }
   }
 
   try {
-    const queryEmbedding = await embedText(question);
+    const modules = await fetchOrgDashboard(req.orgCompanyId, { ensureTemplate: true });
+    const questionIntent = classifyQuestionContext(question);
+    if (questionIntent === "policy_count") {
+      return res.json({
+        answer: await answerPolicyCountQuestion({
+          companyId: req.orgCompanyId,
+          question,
+          modules,
+        }),
+        sources: [],
+        mode: "policy_count",
+      });
+    }
+    const siteMapAnswer = (questionIntent === "navigation" || questionIntent === "policy_listing")
+      ? answerSiteMapQuestion(question, modules)
+      : "";
+    if (siteMapAnswer) {
+      return res.json({
+        answer: siteMapAnswer,
+        sources: [],
+        mode: "site_map",
+      });
+    }
+
+    const closestPolicyArea = findClosestPolicyArea(question, modules);
+    const closestPolicyAreas = findClosestPolicyAreas(question, modules);
+    const expandedQuestionParts = [
+      question,
+      `Question intent: ${questionIntent}.`,
+      `Context hint: ${contextHintForIntent(questionIntent)}`,
+    ];
+    if (closestPolicyArea?.score > 0) {
+      expandedQuestionParts.push(`Likely policy area: ${closestPolicyArea.policy.name} in ${closestPolicyArea.module.name}.`);
+    }
+    const expandedQuestion = expandedQuestionParts.join("\n");
+
+    const queryEmbedding = await embedText(expandedQuestion);
     if (!queryEmbedding.length) {
       return res.status(500).send("Embedding failed.");
     }
     const { data: matches, error: matchError } = await supabase.rpc("match_policy_chunks", {
       query_embedding: queryEmbedding,
       match_count: 12,
-      filter_company: req.session.user.companyId,
+      filter_company: req.orgCompanyId,
     });
     if (matchError) {
       console.error("Chunk match failed:", matchError);
@@ -459,33 +2931,74 @@ app.post("/api/chat", requireAuth, async (req, res) => {
       .slice(0, 5)
       .map((row, index) => `Source ${index + 1}:\n${row.chunk_text.slice(0, 800)}`)
       .join("\n\n");
+    const siteMap = modules.map(formatModulePolicies).join("\n");
+    const matchedPolicyAreas = summarizeMatchedPolicyAreas(filtered, modules);
 
-    const hasSources = Boolean(context);
+    if (!context) {
+      return res.json({
+        answer: await buildClosestPolicyFallback({
+          companyId: req.orgCompanyId,
+          question,
+          modules,
+        }),
+        sources: [],
+      });
+    }
+
     const systemPrompt =
-      "You are an HR policy assistant.\n\n" +
-      "STRICT OUTPUT RULES:\n" +
-      "- Use ONLY the provided policy text.\n" +
-      "- If multiple rules apply, choose the most direct match.\n" +
-      "- Respond in ONE format ONLY:\n" +
-      "  • Up to 3 bullet points, OR\n" +
-      "  • Up to 2 short sentences.\n" +
-      "- No headings, no explanations, no source references.\n" +
-      "- Keep language simple and mobile-friendly.\n\n" +
-      "CLARITY RULES:\n" +
-      "- Treat tables, bullet lists, and section headings as valid policy text.\n" +
-      "- If the answer depends on location, role, or condition not specified,\n" +
-      "  state the rule as written without assumptions.\n\n" +
-      'If the information is missing or unclear in the policy text, respond exactly with:\n"Not mentioned in the policy."';
-    const prompt = `System:\n${systemPrompt}\n\nSources:\n${context || "None"}\n\nQuestion:\n${question}\n\nAnswer:`;
-    const answer = await chatWithGemini(prompt);
+      "You are Ask Genie, an HR policy assistant for employees.\n\n" +
+      "STYLE — STRICT:\n" +
+      "- Maximum 2 short sentences. Bullets only if the user asks for a list.\n" +
+      "- Answer the question directly. No preamble.\n" +
+      "- Never reveal the retrieval mechanism. Forbidden phrases (do not use any of these): \"the provided\", \"the excerpts\", \"the text\", \"the document\", \"the policy text\", \"based on\", \"I checked\", \"focuses on\", \"does not describe\", \"does not contain\", \"does not mention\", \"the information provided\".\n" +
+      "- If the answer isn't in the uploaded policies, reply exactly: \"Not in the uploaded policies. Check with HR.\"\n\n" +
+      "GROUNDING:\n" +
+      "- Use only the provided policy content.\n" +
+      "- Do not invent limits, dates, amounts, approvals.\n" +
+      "- If a rule depends on role/location/tenure that the user didn't give, state the rule and the condition in one sentence.";
+    const closestPolicyPath = closestPolicyArea?.score > 0
+      ? `${closestPolicyArea.module.name} > ${closestPolicyArea.policy.name}`
+      : "No close policy area detected.";
+    const prompt = `System:\n${systemPrompt}\n\nQuestion intent:\n${questionIntent}\n\nContext hint:\n${contextHintForIntent(questionIntent)}\n\nClosest policy area:\n${closestPolicyPath}\n\nTop matched policy areas from retrieval:\n${matchedPolicyAreas || "No matched policy areas."}\n\nSite map:\n${siteMap || "No modules listed."}\n\nPolicy excerpts:\n${context || "None"}\n\nQuestion:\n${question}\n\nAnswer:`;
+    let answer = "";
+    let geminiSucceeded = false;
+    try {
+      answer = await chatWithGemini(prompt);
+      geminiSucceeded = true;
+    } catch (error) {
+      console.error("Gemini chat generation failed:", error);
+      // Surface a clear "we're rate-limited" message rather than the generic
+      // "not in policies" — they're different problems for the user.
+      if (error?.status === 429) {
+        return res.status(503).json({
+          answer: "The chat service is busy right now. Please try again in a minute.",
+          sources: [],
+          error: "rate_limited",
+        });
+      }
+      answer = "Not in the uploaded policies. Check with HR.";
+    }
+    answer = appendClosestPolicyContext({ answer, closestPolicyAreas });
+
+    // Increment the per-user daily counter ONLY when Gemini actually billed us.
+    // Site-map / policy-count answers and Gemini-error fallbacks don't count.
+    let remaining = null;
+    if (geminiSucceeded && role !== "super_admin") {
+      const usage = await recordChatUsage(userId);
+      remaining = usage.remaining;
+    }
 
     return res.json({
-      answer: answer || "I don't have enough information to answer that.",
+      answer: answer || "I could not find this in the uploaded policies. Please check with HR for confirmation.",
       sources: matches || [],
+      ...(remaining !== null ? { remaining } : {}),
     });
   } catch (error) {
     console.error("Chat failed:", error);
-    return res.status(500).send("Unable to answer question.");
+    return res.status(500).json({
+      answer: "I could not search the policies right now. Please try again.",
+      sources: [],
+    });
   }
 });
 
