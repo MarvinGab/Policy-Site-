@@ -1,4 +1,4 @@
-export const uploadPolicyDocument = async ({ policyId, file }) => {
+export const uploadPolicyDocument = async ({ policyId, file, displayName = "", versionLabel = "", effectiveDate = "" }) => {
   if (!policyId) {
     throw new Error("Missing policy ID.");
   }
@@ -9,6 +9,9 @@ export const uploadPolicyDocument = async ({ policyId, file }) => {
   const formData = new FormData();
   formData.append("policyId", policyId);
   formData.append("file", file);
+  if (displayName) formData.append("displayName", displayName);
+  if (versionLabel) formData.append("versionLabel", versionLabel);
+  if (effectiveDate) formData.append("effectiveDate", effectiveDate);
 
   const response = await fetch("/api/upload", {
     method: "POST",

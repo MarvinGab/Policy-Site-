@@ -34,13 +34,19 @@ const THEMES = [
 const STORAGE_KEY = "zarohr-theme";
 
 export const initThemes = () => {
-  const setTheme = (themeId) => {
+  const applyTheme = (themeId) => {
     if (themeId === "default") {
+      document.documentElement.removeAttribute("data-theme");
       document.body.removeAttribute("data-theme");
     } else {
+      document.documentElement.setAttribute("data-theme", themeId);
       document.body.setAttribute("data-theme", themeId);
     }
     localStorage.setItem(STORAGE_KEY, themeId);
+  };
+
+  const setTheme = (themeId) => {
+    applyTheme(themeId);
     panel.querySelectorAll(".theme-option").forEach((option) => {
       option.classList.toggle("is-active", option.dataset.theme === themeId);
     });
@@ -52,7 +58,7 @@ export const initThemes = () => {
 
   const themeButton = document.querySelector(".theme-btn");
   if (!themeButton) {
-    setTheme(initialTheme);
+    applyTheme(initialTheme);
     return;
   }
 

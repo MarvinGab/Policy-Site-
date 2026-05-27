@@ -9,36 +9,191 @@ export const initModules = () => {
   const isPolicyPage = document.body?.dataset.page === "policies";
   if (!isPolicyPage) return;
 
-  const policyCards = Array.from(document.querySelectorAll(".policy-module-card"));
+  // Delegate from the rail container so handlers work even though the cards
+  // are rendered later by policy-render.js (after the API call resolves).
+  const container = document.querySelector("[data-policy-grid]");
+  if (!container) return;
 
-  policyCards.forEach((card) => {
-    card.addEventListener("click", (event) => {
-      if (event.target.closest(".module-list")) return;
-      const link = card.dataset.link;
-      if (link && link !== "#") {
-        window.location.href = link;
-      }
-    });
+  container.addEventListener("click", (event) => {
+    const card = event.target.closest(".policy-module-card");
+    if (!card) return;
+    if (event.target.closest(".module-list")) return;
+    const link = card.dataset.link;
+    if (link && link !== "#") {
+      window.location.href = link;
+    }
   });
 
-  const policyRail = document.querySelector(".policy-rail");
-  if (policyRail) {
-    policyRail.addEventListener("selectstart", (event) => event.preventDefault());
-    policyRail.addEventListener("dblclick", (event) => event.preventDefault());
-    policyRail.addEventListener("mousedown", (event) => {
-      if (event.detail > 1) event.preventDefault();
-    });
-  }
-
-  const policyItems = Array.from(document.querySelectorAll(".policy-item"));
-  policyItems.forEach((item) => {
-    item.addEventListener("dblclick", async (event) => {
-      event.stopPropagation();
-      const policyId = item.dataset.policyId;
-      if (!policyId) return;
-      await previewLatestDocument({ policyId });
-    });
+  container.addEventListener("selectstart", (event) => {
+    if (event.target.closest(".policy-rail")) event.preventDefault();
   });
+  container.addEventListener("mousedown", (event) => {
+    if (event.detail > 1 && event.target.closest(".policy-rail")) event.preventDefault();
+  });
+
+  container.addEventListener("dblclick", async (event) => {
+    const item = event.target.closest(".policy-item");
+    if (!item) {
+      if (event.target.closest(".policy-rail")) event.preventDefault();
+      return;
+    }
+    event.stopPropagation();
+    const policyId = item.dataset.policyId;
+    if (!policyId) return;
+    await previewLatestDocument({ policyId });
+  });
+
+  // Rail search: type-ahead dropdown. As the user types, we build a flat list
+  // of (module, policy) entries and render the top matches as suggestions
+  // below the input. Click / Enter on a suggestion opens it directly —
+  // policies preview the latest PDF, modules scroll into view + flash.
+  initRailSearch(container);
+};
+
+const initRailSearch = (container) => {
+  const search = document.querySelector("[data-rail-search]");
+  const suggestions = document.getElementById("rail-search-suggestions");
+  if (!search || !suggestions) return;
+
+  let index = [];
+  let activeIdx = -1;
+  let currentMatches = [];
+
+  const buildIndex = () => {
+    index = [];
+    container.querySelectorAll(".policy-module-card").forEach((card) => {
+      // Strip the trailing "<n> policies" counter off the title text.
+      const rawTitle = card.querySelector(".rail-title")?.textContent || "";
+      const moduleName = rawTitle.replace(/\d+\s+polic(?:y|ies)\s*$/i, "").trim();
+      index.push({
+        type: "module",
+        label: moduleName,
+        meta: "Module",
+        moduleId: card.dataset.module,
+      });
+      card.querySelectorAll(".policy-item").forEach((item) => {
+        const policyName = (item.querySelector("span")?.textContent || item.textContent || "").trim();
+        index.push({
+          type: "policy",
+          label: policyName,
+          meta: moduleName,
+          moduleId: card.dataset.module,
+          policyId: item.dataset.policyId,
+        });
+      });
+    });
+  };
+
+  const close = () => {
+    suggestions.hidden = true;
+    search.setAttribute("aria-expanded", "false");
+    activeIdx = -1;
+  };
+
+  const highlight = (text, query) => {
+    if (!query) return escape(text);
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx < 0) return escape(text);
+    return `${escape(text.slice(0, idx))}<mark>${escape(text.slice(idx, idx + query.length))}</mark>${escape(text.slice(idx + query.length))}`;
+  };
+
+  const escape = (value = "") =>
+    String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+  const render = (query) => {
+    if (!query) {
+      close();
+      return;
+    }
+    const q = query.toLowerCase();
+    currentMatches = index.filter((entry) => entry.label.toLowerCase().includes(q)).slice(0, 8);
+    if (!currentMatches.length) {
+      suggestions.innerHTML = `<li class="rail-search-suggestions-empty">No matches</li>`;
+      suggestions.hidden = false;
+      search.setAttribute("aria-expanded", "true");
+      activeIdx = -1;
+      return;
+    }
+    activeIdx = 0;
+    suggestions.innerHTML = currentMatches
+      .map(
+        (m, i) => `
+        <li class="rail-search-suggestion${i === 0 ? " is-active" : ""}" role="option" data-idx="${i}">
+          <span class="suggestion-icon" aria-hidden="true">${m.type === "module" ? "▢" : "·"}</span>
+          <div class="suggestion-main">
+            <span class="suggestion-label">${highlight(m.label, query)}</span>
+            <span class="suggestion-meta">${escape(m.meta)}</span>
+          </div>
+        </li>`
+      )
+      .join("");
+    suggestions.hidden = false;
+    search.setAttribute("aria-expanded", "true");
+  };
+
+  const open = (entry) => {
+    close();
+    search.value = "";
+    if (entry.type === "policy" && entry.policyId) {
+      previewLatestDocument({ policyId: entry.policyId });
+      return;
+    }
+    const card = container.querySelector(`.policy-module-card[data-module="${entry.moduleId}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.classList.remove("is-flash");
+    // Reflow forces the animation to restart even if the class was just present.
+    void card.offsetWidth;
+    card.classList.add("is-flash");
+    setTimeout(() => card.classList.remove("is-flash"), 1700);
+  };
+
+  search.addEventListener("input", () => render(search.value.trim()));
+  search.addEventListener("keydown", (event) => {
+    if (suggestions.hidden) return;
+    const items = suggestions.querySelectorAll(".rail-search-suggestion");
+    if (!items.length) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      activeIdx = (activeIdx + 1) % items.length;
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      activeIdx = (activeIdx - 1 + items.length) % items.length;
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const match = currentMatches[activeIdx];
+      if (match) open(match);
+      return;
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+      return;
+    } else {
+      return;
+    }
+    items.forEach((item, i) => item.classList.toggle("is-active", i === activeIdx));
+    items[activeIdx]?.scrollIntoView({ block: "nearest" });
+  });
+
+  suggestions.addEventListener("click", (event) => {
+    const li = event.target.closest(".rail-search-suggestion");
+    if (!li) return;
+    const match = currentMatches[Number(li.dataset.idx)];
+    if (match) open(match);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-rail-search-field]")) close();
+  });
+
+  // Rebuild the index whenever the rail re-renders (admin actions in flight).
+  buildIndex();
+  new MutationObserver(buildIndex).observe(container, { childList: true, subtree: true });
 };
 
 const previewLatestDocument = async ({ policyId }) => {
@@ -65,7 +220,9 @@ const openDocumentViewer = ({ url, name }) => {
   const extension = String(name || "").split(".").pop()?.toLowerCase();
   const isPdf = extension === "pdf";
   const isDoc = extension === "doc" || extension === "docx";
-  let viewerUrl = url;
+  // PDFs: hide the side panel (thumbnails/outline) so the file shows as one
+  // continuous scroll, not a paginated sidebar layout. FitH = fit page width.
+  let viewerUrl = isPdf ? `${url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH` : url;
 
   if (isDoc) {
     viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;

@@ -8,6 +8,7 @@ export const initChatbot = () => {
   const form = chatbot.querySelector(".chatbot-form");
   const input = chatbot.querySelector(".chatbot-input");
   const messages = chatbot.querySelector(".chatbot-messages");
+  const sendButton = chatbot.querySelector(".chatbot-send");
   const logout = document.getElementById("logout");
   const history = loadChatHistory();
 
@@ -39,16 +40,24 @@ export const initChatbot = () => {
     if (event.key === "Escape") setOpen(false);
   });
 
+  input?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    form?.requestSubmit();
+  });
+
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!input || !messages) return;
     const text = input.value.trim();
     if (!text) return;
+    input.disabled = true;
+    if (sendButton) sendButton.disabled = true;
     appendMessage(messages, text, "user");
     history.push({ text, variant: "user" });
     saveChatHistory(history);
     input.value = "";
-    const pending = appendMessage(messages, "Thinking...", "bot");
+    const pending = appendMessage(messages, "Thinking...", "bot", { pending: true });
     messages.scrollTop = messages.scrollHeight;
     fetch("/api/chat", {
       method: "POST",
@@ -65,17 +74,22 @@ export const initChatbot = () => {
       })
       .then((data) => {
         const answer = data?.answer || "I don't have enough information to answer that.";
+        pending.classList.remove("is-pending");
         pending.textContent = answer;
         history.push({ text: answer, variant: "bot" });
         saveChatHistory(history);
       })
       .catch((error) => {
         const message = error?.message || "Unable to answer right now.";
+        pending.classList.remove("is-pending");
         pending.textContent = message;
         history.push({ text: message, variant: "bot" });
         saveChatHistory(history);
       })
       .finally(() => {
+        input.disabled = false;
+        if (sendButton) sendButton.disabled = false;
+        input.focus();
         messages.scrollTop = messages.scrollHeight;
       });
   });
@@ -85,7 +99,7 @@ export const initChatbot = () => {
   });
 };
 
-const appendMessage = (container, text, variant) => {
+const appendMessage = (container, text, variant, options = {}) => {
   const row = document.createElement("div");
   row.className = `chatbot-message-row ${variant}`;
   if (variant === "bot") {
@@ -99,20 +113,22 @@ const appendMessage = (container, text, variant) => {
   }
   const message = document.createElement("div");
   message.className = `chatbot-message ${variant}`;
+  if (options.pending) message.classList.add("is-pending");
   message.textContent = text;
   row.appendChild(message);
   container.appendChild(row);
   return message;
 };
 
-const CHAT_STORAGE_KEY = "policy-chat-history";
+const CHAT_STORAGE_KEY = "policy-chat-history-v2";
 
 const loadChatHistory = () => {
   try {
     const stored = localStorage.getItem(CHAT_STORAGE_KEY);
     const parsed = stored ? JSON.parse(stored) : [];
     if (Array.isArray(parsed) && parsed.length) {
-      return parsed;
+      const cleaned = parsed.filter((item) => item?.text !== "Unable to answer question.");
+      return cleaned.length ? cleaned : [{ text: "Hi! How can I help you?", variant: "bot" }];
     }
   } catch (error) {
     console.warn("Failed to load chat history:", error);
