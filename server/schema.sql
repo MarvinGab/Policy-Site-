@@ -326,3 +326,58 @@ language sql stable as $$
   order by policy_chunks.embedding <=> query_embedding
   limit match_count;
 $$;
+
+-- Hybrid retrieval: pgvector cosine + Postgres full-text rank, fused via
+-- reciprocal rank fusion (RRF). Catches exact-token matches (policy
+-- numbers, names, acronyms) that pure vector search misses.
+drop function if exists match_policy_chunks_hybrid(halfvec, text, int, uuid);
+
+create or replace function match_policy_chunks_hybrid(
+  query_embedding halfvec(3072),
+  query_text text,
+  match_count int,
+  filter_company uuid
+)
+returns table (
+  id uuid,
+  policy_id uuid,
+  chunk_text text,
+  similarity float,
+  hybrid_score float
+)
+language sql stable as $$
+  with vector_hits as (
+    select
+      policy_chunks.id,
+      policy_chunks.policy_id,
+      policy_chunks.chunk_text,
+      1 - (policy_chunks.embedding <=> query_embedding) as similarity,
+      row_number() over (order by policy_chunks.embedding <=> query_embedding) as v_rank
+    from policy_chunks
+    where policy_chunks.company_id = filter_company
+    order by policy_chunks.embedding <=> query_embedding
+    limit match_count * 2
+  ),
+  text_hits as (
+    select
+      policy_chunks.id,
+      row_number() over (
+        order by ts_rank(to_tsvector('english', policy_chunks.chunk_text), plainto_tsquery('english', query_text)) desc
+      ) as t_rank
+    from policy_chunks
+    where policy_chunks.company_id = filter_company
+      and to_tsvector('english', policy_chunks.chunk_text) @@ plainto_tsquery('english', query_text)
+    limit match_count * 2
+  )
+  select
+    v.id,
+    v.policy_id,
+    v.chunk_text,
+    v.similarity,
+    -- RRF with k=60 (standard); vector and text contribute independently
+    (1.0 / (60 + v.v_rank))::float + coalesce(1.0 / (60 + t.t_rank), 0)::float as hybrid_score
+  from vector_hits v
+  left join text_hits t on t.id = v.id
+  order by hybrid_score desc
+  limit match_count;
+$$;

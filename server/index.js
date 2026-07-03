@@ -375,11 +375,37 @@ const fetchGemini = async (path, payload, { maxRetries = 1 } = {}) => {
   throw lastError;
 };
 
+// Tiny in-memory LRU for embedding results. Same query string → same vector,
+// so repeated questions (or rewrites that converge to the same phrasing)
+// skip the Gemini round-trip entirely. Cleared on server restart by design.
+const EMBED_CACHE_MAX = 500;
+const embedCache = new Map();
+const embedCacheGet = (key) => {
+  if (!embedCache.has(key)) return null;
+  const value = embedCache.get(key);
+  embedCache.delete(key);
+  embedCache.set(key, value);
+  return value;
+};
+const embedCacheSet = (key, value) => {
+  if (embedCache.has(key)) embedCache.delete(key);
+  embedCache.set(key, value);
+  if (embedCache.size > EMBED_CACHE_MAX) {
+    embedCache.delete(embedCache.keys().next().value);
+  }
+};
+
 const embedText = async (text) => {
+  const key = String(text || "").trim();
+  if (!key) return [];
+  const cached = embedCacheGet(key);
+  if (cached) return cached;
   const result = await fetchGemini(`${GEMINI_EMBED_MODEL}:embedContent`, {
     content: { parts: [{ text }] },
   });
-  return result?.embedding?.values || [];
+  const vector = result?.embedding?.values || [];
+  if (vector.length) embedCacheSet(key, vector);
+  return vector;
 };
 
 // Per-user daily chat counter, backed by the chat_usage table. The atomic
@@ -434,6 +460,43 @@ const chatWithGemini = async (prompt) => {
     },
   });
   return result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+};
+
+// Rewrites a vague user question into a single retrieval-optimized phrase
+// using the company's actual policy titles as vocabulary. Only called on
+// weak initial retrieval (see /api/chat). Returns "" on failure so the
+// caller silently keeps the original results.
+const rewriteQueryForRetrieval = async (question, modules) => {
+  const moduleList = (modules || [])
+    .map((m) => {
+      const policyNames = (m.policies || []).map((p) => p.name).filter(Boolean).join(", ");
+      return `- ${m.name}${policyNames ? `: ${policyNames}` : ""}`;
+    })
+    .join("\n");
+  const prompt =
+    "You rewrite vague HR questions into ONE retrieval query for a vector search over policy documents.\n\n" +
+    "Rules:\n" +
+    "- Output ONE sentence. No preamble, no quotes, no bullets, no explanation.\n" +
+    "- Use formal HR vocabulary that matches policy titles (e.g. \"leave\" not \"days off\", \"reimbursement\" not \"money back\").\n" +
+    "- Do not invent policies that aren't in the list below.\n" +
+    "- If the question is already specific, output it unchanged.\n\n" +
+    `Available policy areas:\n${moduleList || "(none)"}\n\n` +
+    `User question:\n${question}\n\n` +
+    "Rewritten retrieval query:";
+  try {
+    const result = await fetchGemini(`${GEMINI_CHAT_MODEL}:generateContent`, {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.1,
+        topP: 0.9,
+        maxOutputTokens: 80,
+      },
+    });
+    return (result?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+  } catch (error) {
+    console.warn("Query rewrite failed, keeping original:", error?.message || error);
+    return "";
+  }
 };
 
 const slugify = (value = "") =>
@@ -1380,6 +1443,32 @@ const getPolicyStats = async ({ companyId, modules }) => {
   }
   const uploaded = new Set((data || []).map((row) => row.policy_id).filter(Boolean)).size;
   return { total: policyIds.length, uploaded, pending: Math.max(policyIds.length - uploaded, 0) };
+};
+
+// Source-of-truth listing of which policies have an uploaded document and
+// which don't. Used by the chat handler when the user asks "what policies are
+// uploaded / pending" — answered from the DB, not from RAG, so it can't
+// hallucinate or miss entries.
+const getUploadedPolicyLists = async ({ companyId, modules }) => {
+  const policies = modules.flatMap((module) =>
+    (module.policies || []).map((policy) => ({ id: policy.id, name: policy.name, module: module.name }))
+  );
+  const policyIds = policies.map((p) => p.id).filter(Boolean);
+  if (!policyIds.length) return { uploaded: [], pending: [] };
+  const { data, error } = await supabase
+    .from("policy_documents")
+    .select("policy_id")
+    .eq("company_id", companyId)
+    .in("policy_id", policyIds);
+  if (error) {
+    console.error("Uploaded-list lookup failed:", error);
+    return { uploaded: [], pending: policies };
+  }
+  const uploadedIds = new Set((data || []).map((row) => row.policy_id).filter(Boolean));
+  return {
+    uploaded: policies.filter((p) => uploadedIds.has(p.id)),
+    pending: policies.filter((p) => !uploadedIds.has(p.id)),
+  };
 };
 
 const classifyQuestionContext = (question = "") => {
@@ -2860,6 +2949,19 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
   if (!question) {
     return res.status(400).send("Question is required.");
   }
+  // Optional short conversation history from the client. Each entry is
+  // { role: "user" | "assistant", text }. We use the last 4 turns only —
+  // enough to resolve follow-ups like "what about new hires?" without
+  // bloating the retrieval query or the final prompt.
+  const rawHistory = Array.isArray(req.body?.history) ? req.body.history : [];
+  const history = rawHistory
+    .slice(-4)
+    .map((m) => ({
+      role: m?.role === "assistant" ? "assistant" : "user",
+      text: sanitizeText(m?.text || "").slice(0, 600),
+    }))
+    .filter((m) => m.text);
+  const recentUserTurns = history.filter((m) => m.role === "user").map((m) => m.text);
 
   // Daily quota gate. Super-admin is exempt (one user, used for testing).
   const userId = req.session?.user?.id;
@@ -2889,6 +2991,34 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         mode: "policy_count",
       });
     }
+
+    // "Which policies are uploaded / pending" → answer from the DB directly
+    // so the LLM can't drop entries or hallucinate. Runs before the generic
+    // site-map fallback because that one misses "uploaded"/"pending" intent.
+    const lowerQ = question.toLowerCase();
+    const wantsUploadedList =
+      /\b(uploaded|pending|missing|not uploaded|yet to upload)\b/.test(lowerQ) &&
+      /\b(policy|policies|polices|docs?|documents?|files?|list|which|what|show|all)\b/.test(lowerQ);
+    if (wantsUploadedList) {
+      const { uploaded, pending } = await getUploadedPolicyLists({
+        companyId: req.orgCompanyId,
+        modules,
+      });
+      const askingPending = /\b(pending|missing|not uploaded|yet to upload)\b/.test(lowerQ);
+      const target = askingPending ? pending : uploaded;
+      const label = askingPending ? "pending" : "uploaded";
+      let answer;
+      if (!target.length) {
+        answer = askingPending
+          ? `No pending policies — all ${uploaded.length} listed policies have a document uploaded.`
+          : `No policies have been uploaded yet.`;
+      } else {
+        const lines = target.map((p) => `• ${p.name} (${p.module})`).join("\n");
+        answer = `${target.length} ${target.length === 1 ? "policy is" : "policies are"} ${label}:\n${lines}`;
+      }
+      return res.json({ answer, sources: [], mode: "policy_upload_status" });
+    }
+
     const siteMapAnswer = (questionIntent === "navigation" || questionIntent === "policy_listing")
       ? answerSiteMapQuestion(question, modules)
       : "";
@@ -2900,10 +3030,18 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       });
     }
 
-    const closestPolicyArea = findClosestPolicyArea(question, modules);
-    const closestPolicyAreas = findClosestPolicyAreas(question, modules);
+    // Folding the last user turn into the retrieval query lets follow-ups
+    // ("what about new hires?") resolve against the prior topic. Capped at
+    // 200 chars so it can't overwhelm the current question's embedding.
+    const priorTurn = recentUserTurns[recentUserTurns.length - 2] || "";
+    const questionForRetrieval = priorTurn
+      ? `${question}\nPrior question: ${priorTurn.slice(0, 200)}`
+      : question;
+
+    const closestPolicyArea = findClosestPolicyArea(questionForRetrieval, modules);
+    const closestPolicyAreas = findClosestPolicyAreas(questionForRetrieval, modules);
     const expandedQuestionParts = [
-      question,
+      questionForRetrieval,
       `Question intent: ${questionIntent}.`,
       `Context hint: ${contextHintForIntent(questionIntent)}`,
     ];
@@ -2916,17 +3054,53 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     if (!queryEmbedding.length) {
       return res.status(500).send("Embedding failed.");
     }
-    const { data: matches, error: matchError } = await supabase.rpc("match_policy_chunks", {
+    // Hybrid retrieval (vector + full-text). The RPC fuses pgvector cosine
+    // ranks with Postgres ts_rank via RRF — catches exact-token matches
+    // (policy numbers, names, acronyms) that pure cosine misses.
+    const { data: initialMatches, error: matchError } = await supabase.rpc("match_policy_chunks_hybrid", {
       query_embedding: queryEmbedding,
+      query_text: questionForRetrieval,
       match_count: 12,
       filter_company: req.orgCompanyId,
     });
     if (matchError) {
-      console.error("Chunk match failed:", matchError);
+      console.error("Hybrid chunk match failed:", matchError);
       return res.status(500).send("Unable to search policies.");
     }
 
-    const filtered = (matches || []).filter((row) => (row.similarity || 0) >= 0.15);
+    let matches = initialMatches || [];
+    let filtered = matches.filter((row) => (row.similarity || 0) >= 0.15);
+
+    // Adaptive query rewrite. When the first retrieval looks weak — either
+    // the top match is mediocre or fewer than two chunks survived the floor
+    // — ask Gemini to rephrase the question in policy vocabulary and search
+    // again. Costs one extra Gemini call, but only on vague questions; the
+    // clear ones skip it entirely.
+    const initialTopSim = filtered[0]?.similarity || 0;
+    if (initialTopSim < 0.22 || filtered.length < 2) {
+      const rewrittenQuery = await rewriteQueryForRetrieval(question, modules);
+      if (rewrittenQuery && rewrittenQuery.toLowerCase() !== question.trim().toLowerCase()) {
+        const rewriteEmbedding = await embedText(rewrittenQuery);
+        if (rewriteEmbedding.length) {
+          const { data: rewriteMatches, error: rewriteError } = await supabase.rpc("match_policy_chunks_hybrid", {
+            query_embedding: rewriteEmbedding,
+            query_text: rewrittenQuery,
+            match_count: 12,
+            filter_company: req.orgCompanyId,
+          });
+          if (rewriteError) {
+            console.error("Rewrite hybrid chunk match failed:", rewriteError);
+          } else {
+            const rewriteFiltered = (rewriteMatches || []).filter((row) => (row.similarity || 0) >= 0.15);
+            if ((rewriteFiltered[0]?.similarity || 0) > initialTopSim) {
+              matches = rewriteMatches || [];
+              filtered = rewriteFiltered;
+            }
+          }
+        }
+      }
+    }
+
     const context = filtered
       .slice(0, 5)
       .map((row, index) => `Source ${index + 1}:\n${row.chunk_text.slice(0, 800)}`)
@@ -2959,7 +3133,10 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     const closestPolicyPath = closestPolicyArea?.score > 0
       ? `${closestPolicyArea.module.name} > ${closestPolicyArea.policy.name}`
       : "No close policy area detected.";
-    const prompt = `System:\n${systemPrompt}\n\nQuestion intent:\n${questionIntent}\n\nContext hint:\n${contextHintForIntent(questionIntent)}\n\nClosest policy area:\n${closestPolicyPath}\n\nTop matched policy areas from retrieval:\n${matchedPolicyAreas || "No matched policy areas."}\n\nSite map:\n${siteMap || "No modules listed."}\n\nPolicy excerpts:\n${context || "None"}\n\nQuestion:\n${question}\n\nAnswer:`;
+    const conversationBlock = history.length
+      ? history.map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.text}`).join("\n")
+      : "";
+    const prompt = `System:\n${systemPrompt}\n\nQuestion intent:\n${questionIntent}\n\nContext hint:\n${contextHintForIntent(questionIntent)}\n\nClosest policy area:\n${closestPolicyPath}\n\nTop matched policy areas from retrieval:\n${matchedPolicyAreas || "No matched policy areas."}\n\nSite map:\n${siteMap || "No modules listed."}\n\nPolicy excerpts:\n${context || "None"}\n\nRecent conversation:\n${conversationBlock || "(none)"}\n\nQuestion:\n${question}\n\nAnswer:`;
     let answer = "";
     let geminiSucceeded = false;
     try {

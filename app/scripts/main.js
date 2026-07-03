@@ -80,21 +80,12 @@ const hydrateHeader = (page) => {
 
   if (page === "policies") {
     headerLinks.innerHTML = `
-      <div class="header-policy">
-        <span class="policy-kicker">Policy command center</span>
-        <span class="policy-total" data-policy-total></span>
-      </div>
-    `;
-    // Search bar lives in the header for the rail dashboard so it doesn't eat
-    // vertical space above the tiles. data-rail-search-field is what
-    // modules.js binds to for the type-ahead dropdown.
-    headerCtas.innerHTML = `
       <div class="rail-search-field" data-rail-search-field>
         <input
           type="search"
           class="rail-search-input"
           data-rail-search
-          placeholder="Search"
+          placeholder="Search policies"
           autocomplete="off"
           aria-label="Search policies"
           aria-autocomplete="list"
@@ -102,6 +93,12 @@ const hydrateHeader = (page) => {
           aria-expanded="false"
         />
         <ul class="rail-search-suggestions" id="rail-search-suggestions" role="listbox" hidden></ul>
+      </div>
+    `;
+    headerCtas.innerHTML = `
+      <div class="header-policy">
+        <span class="policy-kicker">Policy command center</span>
+        <span class="policy-total" data-policy-total></span>
       </div>
       <button class="btn ghost" id="logout">Logout</button>
     `;

@@ -40,7 +40,7 @@ export const initModules = () => {
     event.stopPropagation();
     const policyId = item.dataset.policyId;
     if (!policyId) return;
-    await previewLatestDocument({ policyId });
+    await previewLatestDocument({ policyId, item });
   });
 
   // Rail search: type-ahead dropdown. As the user types, we build a flat list
@@ -111,7 +111,13 @@ const initRailSearch = (container) => {
       return;
     }
     const q = query.toLowerCase();
-    currentMatches = index.filter((entry) => entry.label.toLowerCase().includes(q)).slice(0, 8);
+    const allMatches = index.filter((entry) => entry.label.toLowerCase().includes(q));
+    // Policy names are what users actually search for; module/tile matches are
+    // navigation hints. Show up to 7 policies first, then up to 3 modules if
+    // there's room left within the 8-result cap.
+    const policyMatches = allMatches.filter((m) => m.type === "policy").slice(0, 7);
+    const moduleMatches = allMatches.filter((m) => m.type === "module").slice(0, 3);
+    currentMatches = [...policyMatches, ...moduleMatches].slice(0, 8);
     if (!currentMatches.length) {
       suggestions.innerHTML = `<li class="rail-search-suggestions-empty">No matches</li>`;
       suggestions.hidden = false;
@@ -196,7 +202,10 @@ const initRailSearch = (container) => {
   new MutationObserver(buildIndex).observe(container, { childList: true, subtree: true });
 };
 
-const previewLatestDocument = async ({ policyId }) => {
+const previewLatestDocument = async ({ policyId, item }) => {
+  // Subtle "we're opening this" state — a tiny inline spinner appears next to
+  // the policy name while the fetch is in flight. No big overlay, no toast.
+  item?.classList.add("is-opening");
   try {
     const files = await listPolicyDocuments({ policyId });
     if (!files.length) {
@@ -209,6 +218,8 @@ const previewLatestDocument = async ({ policyId }) => {
   } catch (error) {
     console.error("Preview failed:", error);
     showToast("Unable to open document preview.", "error");
+  } finally {
+    item?.classList.remove("is-opening");
   }
 };
 
