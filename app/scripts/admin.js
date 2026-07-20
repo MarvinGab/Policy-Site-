@@ -41,6 +41,9 @@ export const initAdmin = () => {
   const peopleFile = document.querySelector("[data-people-file]");
   const peopleModeNote = document.querySelector("[data-people-mode-note]");
   const emailForm = document.querySelector("[data-email-settings]");
+  const templateForm = document.querySelector("[data-template-form]");
+  const templateList = document.querySelector("[data-template-list]");
+  const templateStatus = document.querySelector("[data-template-status]");
   const settingsForm = document.querySelector("[data-settings-form]");
   const hrmsForm = document.querySelector("[data-hrms-settings]");
   const hrmsLaunchUrl = document.querySelector("[data-hrms-launch-url]");
@@ -55,6 +58,7 @@ export const initAdmin = () => {
     modules: "Modules",
     admins: "Org Admins",
     people: "People",
+    communication: "Communication",
     email: "Email",
     hrms: "HRMS Access",
     settings: "Settings",
@@ -62,12 +66,17 @@ export const initAdmin = () => {
   let activeFilter = "all";
   let policyData = [];
   let peopleData = [];
+  let emailTemplates = [];
+  let activeTemplateId = null;
   let accessMode = "standalone";
+  let orgLoginUrl = "";
   let hrmsSettings = null;
 
   const isSectionAllowed = (section) => {
     if (section !== "modules" && !isSuperAdmin) return false;
-    if (section === "people" || section === "email") return accessMode !== "hrms_link";
+    if (section === "people" || section === "communication" || section === "email") {
+      return accessMode !== "hrms_link";
+    }
     if (section === "hrms") return accessMode === "hrms_link";
     return Boolean(tabTitles[section]);
   };
@@ -82,7 +91,7 @@ export const initAdmin = () => {
       peopleModeNote.textContent =
         accessMode === "hrms_link"
           ? "HRMS Tile mode — people are managed by the HRMS and this section is hidden."
-          : "Standalone mode — adding an email auto-generates a portal password and shows it once.";
+          : "Standalone mode — employee code + email are required. New employees get a temporary password.";
     }
     const activeSection = document.querySelector("[data-admin-section].is-active")?.dataset.adminSection || "modules";
     if (!isSectionAllowed(activeSection)) {
@@ -90,16 +99,40 @@ export const initAdmin = () => {
     }
   };
 
+  // Build the org's public login URL from the current session and paint it
+  // into the Settings card. Only visible when the Standalone radio is the
+  // active access mode — the URL is meaningless in HRMS Tile mode where
+  // HRMS owns the entry point.
+  const renderOrgLoginUrl = async () => {
+    const card = document.querySelector("[data-org-url-card]");
+    if (!card) return;
+    const standaloneRadio = settingsForm?.querySelector('input[name="access_mode"][value="standalone"]');
+    if (!standaloneRadio?.checked) { card.hidden = true; return; }
+    try {
+      const url = orgLoginUrl || (await apiJson("/api/org/settings")).login_url;
+      if (!url) { card.hidden = true; return; }
+      const codeEl = card.querySelector("[data-org-login-url]");
+      const openEl = card.querySelector("[data-org-login-open]");
+      if (codeEl) codeEl.textContent = url;
+      if (openEl) openEl.setAttribute("href", url);
+      card.hidden = false;
+    } catch {
+      card.hidden = true;
+    }
+  };
+
   const loadSettings = async () => {
     try {
       const data = await apiJson("/api/org/settings");
       accessMode = data.access_mode || "standalone";
+      orgLoginUrl = data.login_url || "";
     if (settingsForm) {
         const radio = settingsForm.querySelector(`input[name="access_mode"][value="${accessMode}"]`);
         if (radio) radio.checked = true;
       }
       if (isSuperAdmin) await loadAdmins();
       applyAccessMode();
+      await renderOrgLoginUrl();
       if (accessMode === "standalone") {
         await loadPeople();
         await loadEmailSettings();
@@ -153,14 +186,11 @@ export const initAdmin = () => {
     try {
       const data = await apiJson("/api/org/email-settings");
       const smtp = data.smtp || {};
-      const draft = data.draft || {};
       setField(emailForm, "host", smtp.host || "");
       setField(emailForm, "port", smtp.port || "");
       setField(emailForm, "username", smtp.username || "");
       setField(emailForm, "from_email", smtp.from_email || "");
       setField(emailForm, "from_name", smtp.from_name || "");
-      setField(emailForm, "subject", draft.subject || "You have been invited to the policy portal");
-      setField(emailForm, "body", draft.body || "Hello {{name}}, you have been added to the {{organization}} policy portal.");
     } catch (error) {
       console.error("Email settings load failed:", error);
     }
@@ -208,6 +238,18 @@ export const initAdmin = () => {
     }
     if (nextTab === "hrms") {
       loadHrmsSettings();
+    }
+    if (nextTab === "communication") {
+      loadEmailTemplates();
+    }
+    // Upload-sheet button only makes sense on the People page.
+    document.querySelectorAll("[data-people-only]").forEach((el) => {
+      el.hidden = nextTab !== "people";
+    });
+    // Collapse any open register panels when leaving the People tab.
+    if (nextTab !== "people") {
+      document.querySelectorAll("[data-register-panel]").forEach((p) => (p.hidden = true));
+      document.querySelectorAll("[data-register-toggle]").forEach((b) => b.setAttribute("aria-expanded", "false"));
     }
   };
 
@@ -627,14 +669,41 @@ export const initAdmin = () => {
     }
   });
 
+  // Email validation shared by the two add-forms in the People register.
+  const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  const showFormError = (form, message) => {
+    const box = form?.querySelector("[data-form-error]");
+    if (!box) return;
+    if (message) {
+      box.textContent = message;
+      box.hidden = false;
+    } else {
+      box.textContent = "";
+      box.hidden = true;
+    }
+  };
+
   peopleForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(peopleForm);
+    const email = String(form.get("email") || "").trim();
+    const code = String(form.get("employee_code") || "").trim();
+    if (!code) {
+      showFormError(peopleForm, "Employee code is required.");
+      return;
+    }
+    if (!EMAIL_RE.test(email)) {
+      showFormError(peopleForm, "Enter a valid email address.");
+      return;
+    }
+    showFormError(peopleForm, "");
     try {
       const people = await apiJson("/api/org/people", {
         method: "POST",
         body: JSON.stringify({
-          email: form.get("email"),
+          email,
+          employee_code: code,
+          name: form.get("name"),
           role: "employee",
           status: "active",
         }),
@@ -642,20 +711,401 @@ export const initAdmin = () => {
       peopleForm.reset();
       const first = people?.[0];
       if (first?.email_sent) {
-        showToast(`Employee added. Sign-in link sent to ${first.email}.`, "info");
-      } else if (first?.dev_link) {
-        // Dev-mode shortcut: copy this link, open it on the same browser as
-        // the admin to verify the flow without checking email.
-        showToast(`Employee added. Dev sign-in link: ${first.dev_link}`, "info");
+        showToast(`Employee added. Credentials sent to ${first.email}.`, "info");
+      } else if (first?.temporary_password) {
+        showToast(`Employee added. Temporary password: ${first.temporary_password}`, "info");
       } else if (first?.email_error) {
-        showToast(`Employee added but invite email failed: ${first.email_error}`, "error");
+        showToast(`Employee added but credentials email failed: ${first.email_error}`, "error");
       } else {
         showToast("Employee added.", "info");
       }
       await loadPeople();
     } catch (error) {
-      showToast(error.message || "Could not add person.", "error");
+      showFormError(peopleForm, error.message || "Could not add person.");
     }
+  });
+
+  // Add-admin form living on the People page (mirrors the Admins-tab form,
+  // hits the same endpoint).
+  const peopleAdminForm = document.querySelector("[data-people-admin-form]");
+  peopleAdminForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(peopleAdminForm);
+    const email = String(form.get("email") || "").trim();
+    if (!EMAIL_RE.test(email)) {
+      showFormError(peopleAdminForm, "Enter a valid email address.");
+      return;
+    }
+    showFormError(peopleAdminForm, "");
+    try {
+      const data = await apiJson("/api/org/admins", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.get("name"),
+          email,
+          send_email: form.get("send_email") === "on",
+        }),
+      });
+      peopleAdminForm.reset();
+      const password = data?.temporary_password;
+      const emailNote = data?.email_sent ? " Invite email sent." : "";
+      const warning = data?.email_error ? ` Email not sent: ${data.email_error}` : "";
+      showToast(password ? `Admin added. Temporary password: ${password}.${emailNote}${warning}` : `Admin added.${emailNote}${warning}`, data?.email_error ? "error" : "info");
+      await loadPeople();
+      await loadAdmins();
+    } catch (error) {
+      showFormError(peopleAdminForm, error.message || "Admin add failed.");
+    }
+  });
+
+  // Register-panel accordion. Clicking a toggle opens its panel and closes
+  // the others; clicking the same toggle again collapses it. Opening any
+  // register panel also exits Invite/Delete selection mode so the two UIs
+  // don't stack on screen.
+  document.querySelectorAll("[data-register-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.registerToggle;
+      const panel = document.querySelector(`[data-register-panel="${key}"]`);
+      if (!panel) return;
+      const willOpen = panel.hidden;
+      document.querySelectorAll("[data-register-panel]").forEach((p) => (p.hidden = true));
+      document.querySelectorAll("[data-register-toggle]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+      if (willOpen) {
+        panel.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+        panel.querySelector("input, textarea")?.focus();
+        // Exit selection mode if one was on.
+        if (typeof setSelectionMode === "function" && selectionMode) setSelectionMode(null);
+      }
+    });
+  });
+
+  // Selection mode (Invite / Delete). Both modes are mutually exclusive.
+  // Toggling either one on shows checkboxes on every person row and the
+  // selection bar; toggling off returns to the normal view.
+  const selectionBar = document.querySelector("[data-selection-bar]");
+  const selectionCount = document.querySelector("[data-selection-count]");
+  const selectionConfirm = document.querySelector("[data-selection-confirm]");
+  const selectionCancel = document.querySelector("[data-selection-cancel]");
+  const selectAllBox = document.querySelector("[data-select-all]");
+  let selectionMode = null; // null | "invite" | "delete"
+
+  const setSelectionMode = (nextMode) => {
+    selectionMode = nextMode;
+    const on = Boolean(nextMode);
+    if (selectionBar) selectionBar.hidden = !on;
+    // Entering selection mode collapses any open register panel so the two
+    // UIs don't stack on screen.
+    if (on) {
+      document.querySelectorAll("[data-register-panel]").forEach((p) => (p.hidden = true));
+      document.querySelectorAll("[data-register-toggle]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+    }
+    document.querySelectorAll("[data-select-mode]").forEach((btn) => {
+      const active = btn.dataset.selectMode === nextMode;
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+      btn.classList.toggle("is-active", active);
+    });
+    document.querySelectorAll("[data-person-select]").forEach((el) => {
+      el.hidden = !on;
+    });
+    document.querySelectorAll("[data-person-checkbox]").forEach((cb) => {
+      cb.checked = false;
+    });
+    if (selectAllBox) selectAllBox.checked = false;
+    if (selectionConfirm) {
+      selectionConfirm.textContent = nextMode === "delete" ? "Delete selected" : "Send invites";
+      selectionConfirm.classList.toggle("selection-confirm-danger", nextMode === "delete");
+    }
+    updateSelectionCount();
+  };
+
+  const getSelectedIds = () =>
+    Array.from(document.querySelectorAll("[data-person-checkbox]"))
+      .filter((cb) => cb.checked && !cb.disabled)
+      .map((cb) => cb.value);
+
+  const updateSelectionCount = () => {
+    if (!selectionCount) return;
+    const n = getSelectedIds().length;
+    selectionCount.textContent = `${n} selected`;
+    if (selectionConfirm) selectionConfirm.disabled = n === 0;
+  };
+
+  document.querySelectorAll("[data-select-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.dataset.selectMode;
+      setSelectionMode(selectionMode === next ? null : next);
+    });
+  });
+
+  selectAllBox?.addEventListener("change", () => {
+    const on = selectAllBox.checked;
+    document.querySelectorAll("[data-person-checkbox]").forEach((cb) => {
+      cb.checked = on;
+    });
+    updateSelectionCount();
+  });
+
+  // Row checkbox toggle (delegated so it works across re-renders).
+  peopleList?.addEventListener("change", (event) => {
+    if (event.target.matches("[data-person-checkbox]")) updateSelectionCount();
+  });
+
+  selectionCancel?.addEventListener("click", () => setSelectionMode(null));
+
+  selectionConfirm?.addEventListener("click", async () => {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+
+    if (selectionMode === "invite") {
+      // Warn if any of the selected people were already invited — re-invite
+      // regenerates the temp password and burns the old one.
+      const rows = ids
+        .map((id) => document.querySelector(`[data-person-id="${id}"]`))
+        .filter(Boolean);
+      const previouslyInvited = rows.filter((row) => row.dataset.invited === "1").length;
+      let confirmed;
+      if (previouslyInvited > 0) {
+        confirmed = await confirmDialog({
+          title: "Reset password for invited employees?",
+          message: `${previouslyInvited} of the ${ids.length} selected employees were already invited. Re-sending will reset their password (any old temp password and active session become invalid). Continue?`,
+          confirmText: "Send & reset",
+        });
+      } else {
+        confirmed = await confirmDialog({
+          title: `Invite ${ids.length} ${ids.length === 1 ? "employee" : "employees"}?`,
+          message: "Each will receive a fresh temporary password by email.",
+          confirmText: "Send invites",
+        });
+      }
+      if (!confirmed) return;
+      try {
+        const result = await apiJson("/api/org/people/invite-many", {
+          method: "POST",
+          body: JSON.stringify({ ids }),
+        });
+        showToast(
+          `Invites sent: ${result.sent}. Failed: ${result.failed}. Skipped: ${result.skipped}.`,
+          result.failed > 0 ? "error" : "info"
+        );
+        setSelectionMode(null);
+        await loadPeople();
+      } catch (error) {
+        showToast(error.message || "Invite failed.", "error");
+      }
+    } else if (selectionMode === "delete") {
+      const confirmed = await confirmDialog({
+        title: `Delete ${ids.length} ${ids.length === 1 ? "employee" : "employees"}?`,
+        message:
+          "They lose portal access immediately, any old invite links stop working, and their chat history is removed. This cannot be undone.",
+        confirmText: "Delete",
+      });
+      if (!confirmed) return;
+      try {
+        const result = await apiJson("/api/org/people/delete-many", {
+          method: "POST",
+          body: JSON.stringify({ ids }),
+        });
+        showToast(
+          `Deleted: ${result.deleted}. Failed: ${result.failed}. Skipped: ${result.skipped}.`,
+          result.failed > 0 ? "error" : "info"
+        );
+        setSelectionMode(null);
+        await loadPeople();
+      } catch (error) {
+        showToast(error.message || "Delete failed.", "error");
+      }
+    }
+  });
+
+  // Re-apply selection-mode UI whenever the People list re-renders, so
+  // toggling to a mode and adding a person via the form keeps checkboxes on.
+  if (peopleList) {
+    new MutationObserver(() => {
+      if (selectionMode) {
+        document.querySelectorAll("[data-person-select]").forEach((el) => (el.hidden = false));
+      }
+      applyPeopleSearch();
+    }).observe(peopleList, { childList: true });
+  }
+
+  // Simple client-side search over rendered person rows. Runs against the
+  // name (first cell strong), the employee code / email line, and matches
+  // by substring, case-insensitive. Empty query → show everything.
+  const peopleSearch = document.querySelector("[data-people-search]");
+  const applyPeopleSearch = () => {
+    const query = String(peopleSearch?.value || "").trim().toLowerCase();
+    const rows = document.querySelectorAll("[data-people-list] .person-row");
+    rows.forEach((row) => {
+      if (!query) { row.hidden = false; return; }
+      const info = row.querySelector(".person-info")?.textContent?.toLowerCase() || "";
+      row.hidden = !info.includes(query);
+    });
+  };
+  peopleSearch?.addEventListener("input", applyPeopleSearch);
+
+  // Reusable communication templates. The active template is used for new
+  // employee credentials; other templates remain available for later use.
+  const DEFAULT_DRAFT = {
+    subject: "Your {{org_name}} policy portal access",
+    body:
+      "Hi {{name}},\n\n" +
+      "You've been added to the {{org_name}} policy portal.\n\n" +
+      "Login URL: {{login_url}}\n" +
+      "Employee code: {{employee_code}}\n" +
+      "Temporary password: {{password}}\n\n" +
+      "If you did not expect this email, contact your HR team.\n\n" +
+      "{{org_name}}",
+  };
+
+  const renderEmailTemplates = () => {
+    if (!templateList) return;
+    templateList.innerHTML = emailTemplates.length
+      ? emailTemplates.map((template) => `
+          <button
+            class="template-list-item${template.id === activeTemplateId ? " is-selected" : ""}"
+            type="button"
+            data-template-id="${template.id}"
+          >
+            <span>${escapeHtml(template.name)}</span>
+            ${template.is_default ? "<small>Active</small>" : ""}
+          </button>
+        `).join("")
+      : `<div class="admin-empty">No templates yet.</div>`;
+  };
+
+  const selectEmailTemplate = (id) => {
+    const template = emailTemplates.find((item) => item.id === id);
+    if (!template || !templateForm) return;
+    activeTemplateId = id;
+    templateForm.name.value = template.name || "";
+    templateForm.subject.value = template.subject || "";
+    templateForm.body.value = template.body || "";
+    templateForm.is_default.checked = template.is_default === true;
+    if (templateStatus) {
+      templateStatus.textContent = template.is_default
+        ? "Active employee invitation"
+        : "Saved communication template";
+    }
+    renderEmailTemplates();
+  };
+
+  async function loadEmailTemplates({ force = false } = {}) {
+    if (!templateForm || (!force && emailTemplates.length)) return;
+    try {
+      emailTemplates = await apiJson("/api/org/email-templates");
+      const selected = emailTemplates.find((item) => item.id === activeTemplateId)
+        || emailTemplates.find((item) => item.is_default)
+        || emailTemplates[0];
+      renderEmailTemplates();
+      if (selected) selectEmailTemplate(selected.id);
+    } catch (error) {
+      showToast(error.message || "Templates could not be loaded.", "error");
+    }
+  }
+
+  templateList?.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-template-id]");
+    if (item) selectEmailTemplate(item.dataset.templateId);
+  });
+
+  document.querySelector("[data-action='template-create']")?.addEventListener("click", async () => {
+    try {
+      const created = await apiJson("/api/org/email-templates", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "New template",
+          subject: DEFAULT_DRAFT.subject,
+          body: DEFAULT_DRAFT.body,
+        }),
+      });
+      emailTemplates.push(created);
+      selectEmailTemplate(created.id);
+      templateForm?.name.select();
+      showToast("Template created.", "info");
+    } catch (error) {
+      showToast(error.message || "Template creation failed.", "error");
+    }
+  });
+
+  templateForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!activeTemplateId) return;
+    try {
+      const saved = await apiJson(`/api/org/email-templates/${activeTemplateId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: templateForm.name.value,
+          subject: templateForm.subject.value,
+          body: templateForm.body.value,
+        }),
+      });
+      if (templateForm.is_default.checked && !saved.is_default) {
+        await apiJson(`/api/org/email-templates/${activeTemplateId}/default`, { method: "POST" });
+      }
+      await loadEmailTemplates({ force: true });
+      showToast("Template saved.", "info");
+    } catch (error) {
+      showToast(error.message || "Template save failed.", "error");
+    }
+  });
+
+  document.querySelector("[data-action='template-delete']")?.addEventListener("click", async () => {
+    if (!activeTemplateId) return;
+    const confirmed = await confirmDialog({
+      title: "Delete template",
+      message: "Delete this communication template?",
+      confirmText: "Delete",
+    });
+    if (!confirmed) return;
+    try {
+      await apiJson(`/api/org/email-templates/${activeTemplateId}`, { method: "DELETE" });
+      activeTemplateId = null;
+      emailTemplates = [];
+      await loadEmailTemplates({ force: true });
+      showToast("Template deleted.", "info");
+    } catch (error) {
+      showToast(error.message || "Template deletion failed.", "error");
+    }
+  });
+
+  // Toggle URL card as the user flips between access modes (before Save).
+  settingsForm?.querySelectorAll('input[name="access_mode"]').forEach((radio) => {
+    radio.addEventListener("change", () => { renderOrgLoginUrl(); });
+  });
+
+  document.querySelector("[data-action='copy-org-url']")?.addEventListener("click", async () => {
+    const url = document.querySelector("[data-org-login-url]")?.textContent?.trim();
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied.", "info");
+    } catch { showToast("Could not copy — select and copy manually.", "error"); }
+  });
+
+  // Upload-sheet slide-out toggle. Uses a class (not the hidden attribute)
+  // so the CSS transition actually plays on toggle instead of the panel
+  // popping into layout from display:none.
+  const uploadSheetToggle = document.querySelector("[data-upload-sheet-toggle]");
+  const uploadSheetPanel = document.querySelector("[data-upload-sheet-panel]");
+  uploadSheetToggle?.addEventListener("click", () => {
+    if (!uploadSheetPanel) return;
+    const willOpen = !uploadSheetPanel.classList.contains("is-open");
+    uploadSheetPanel.classList.toggle("is-open", willOpen);
+    uploadSheetToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  });
+
+  document.querySelector("[data-action='people-template']")?.addEventListener("click", () => {
+    const csv = "employee_code,name,email\nEMP001,Jane Doe,jane.doe@example.com\nEMP002,,employee@example.com\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "employee-upload-template.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   });
 
   document.querySelector("[data-action='people-upload']")?.addEventListener("click", () => peopleFile?.click());
@@ -669,7 +1119,7 @@ export const initAdmin = () => {
         body: JSON.stringify({ people }),
       });
       peopleFile.value = "";
-      showToast("People imported.", "info");
+      showToast("People imported. New employees received temporary passwords where email is configured.", "info");
       await loadPeople();
     } catch (error) {
       showToast(error.message || "Import failed.", "error");
@@ -694,11 +1144,11 @@ export const initAdmin = () => {
       if (button.dataset.peopleAction === "resend-invite") {
         const data = await apiJson(`/api/org/people/${id}/resend-invite`, { method: "POST" });
         if (data.email_sent) {
-          showToast(`Fresh sign-in link sent to ${data.email}.`, "info");
-        } else if (data.dev_link) {
-          showToast(`Dev link: ${data.dev_link}`, "info");
+          showToast(`Fresh credentials sent to ${data.email}.`, "info");
+        } else if (data.temporary_password) {
+          showToast(`Temporary password: ${data.temporary_password}`, "info");
         } else {
-          showToast(data.email_error || "Could not send invite.", "error");
+          showToast(data.email_error || "Could not send credentials.", "error");
         }
       }
       if (button.dataset.peopleAction === "delete") {
@@ -728,13 +1178,9 @@ export const initAdmin = () => {
             from_email: form.get("from_email"),
             from_name: form.get("from_name"),
           },
-          draft: {
-            subject: form.get("subject"),
-            body: form.get("body"),
-          },
         }),
       });
-      showToast("Email settings saved.", "info");
+      showToast("SMTP settings saved.", "info");
     } catch (error) {
       showToast(error.message || "Email settings failed.", "error");
     }
@@ -819,28 +1265,19 @@ const renderPeople = (container, people, options = {}) => {
   container.innerHTML = people
     .map(
       (person) => `
-        <article class="person-row" data-person-id="${person.id}">
-          <div>
+        <article class="person-row" data-person-id="${person.id}" data-invited="${person.invited_at ? "1" : "0"}">
+          <label class="person-select" data-person-select hidden>
+            <input type="checkbox" data-person-checkbox value="${person.id}" />
+          </label>
+          <div class="person-info">
             <strong>${escapeHtml(person.name || person.email)}</strong>
-            <span>${escapeHtml(person.email)}</span>
+            <span>${escapeHtml(person.employee_code || "No code")} · ${escapeHtml(person.email)}</span>
           </div>
-          <span class="person-pill">${escapeHtml(person.role)}</span>
-          <span class="person-pill">${escapeHtml(person.status)}</span>
-          ${
-            options.adminList
-              ? `<div class="admin-actions">
-                  <span class="person-pill">${person.invited_at ? "Invite sent" : "Invite not sent"}</span>
-                  <button class="icon-btn" type="button" data-people-action="send-invite">Send invite</button>
-                  <button class="icon-btn" type="button" data-people-action="disable">Disable</button>
-                  <button class="icon-btn danger" type="button" data-people-action="delete">Delete</button>
-                </div>`
-              : `<div class="admin-actions">
-                  <button class="icon-btn" type="button" data-people-action="invite">Invite</button>
-                  <button class="icon-btn" type="button" data-people-action="resend-invite">Resend invite</button>
-                  <button class="icon-btn" type="button" data-people-action="disable">Disable</button>
-                  <button class="icon-btn danger" type="button" data-people-action="delete">Delete</button>
-                </div>`
-          }
+          <div class="admin-actions">
+            ${person.invited_at
+              ? `<span class="person-pill person-pill-invited" title="Invited on ${escapeHtml(new Date(person.invited_at).toLocaleString())}">✓ Invited</span>`
+              : `<span class="person-pill person-pill-pending">Not invited</span>`}
+          </div>
         </article>
       `
     )
@@ -1040,15 +1477,25 @@ const parsePeopleCsv = (text) => {
   const rows = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!rows.length) return [];
   const first = rows[0].toLowerCase();
-  // Single-column "email" file: drop any header line and keep the rest.
-  const hasHeader = first === "email" || first.startsWith("email,") || first.startsWith("email ");
+  const hasHeader = first.includes("employee_code") || first.includes("email");
+  const headers = hasHeader ? rows[0].split(",").map((h) => h.trim().toLowerCase()) : ["employee_code", "name", "email"];
   const dataRows = hasHeader ? rows.slice(1) : rows;
   return dataRows
     .map((line) => {
-      const email = line.split(",")[0]?.trim();
-      return { email, role: "employee", status: "active" };
+      const cells = line.split(",").map((cell) => cell.trim());
+      const get = (key, fallbackIndex) => {
+        const index = headers.indexOf(key);
+        return cells[index >= 0 ? index : fallbackIndex] || "";
+      };
+      return {
+        employee_code: get("employee_code", 0),
+        name: get("name", 1),
+        email: get("email", 2),
+        role: "employee",
+        status: "active",
+      };
     })
-    .filter((row) => row.email && row.email.includes("@"));
+    .filter((row) => row.employee_code && row.email && row.email.includes("@"));
 };
 
 const setField = (form, name, value) => {

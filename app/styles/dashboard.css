@@ -72,14 +72,10 @@ body[data-page="policies"] .policy-dashboard {
 }
 
 .theme-btn {
-  bottom: 320px;
-}
-
-.manage-modules-btn {
   bottom: 264px;
 }
 
-.admins-admin-btn {
+.manage-modules-btn {
   bottom: 208px;
 }
 
@@ -924,13 +920,12 @@ body[data-page="policies"] .policy-dashboard {
   .org-settings-btn { bottom: 76px; }
   .people-admin-btn,
   .hrms-admin-btn { bottom: 124px; }
-  .admins-admin-btn { bottom: 172px; }
-  .manage-modules-btn { bottom: 220px; }
-  .theme-btn { bottom: 268px; }
+  .manage-modules-btn { bottom: 172px; }
+  .theme-btn { bottom: 220px; }
 
   .theme-panel {
     left: 16px;
-    bottom: 316px;
+    bottom: 268px;
   }
 
   /* Tooltip labels rarely make sense on touch; hide them on small screens. */

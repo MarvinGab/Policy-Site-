@@ -89,7 +89,7 @@ const renderRail = (container, data) => {
   const modules = data.modules || [];
   container.innerHTML = buildPolicyRail(modules);
   container.querySelectorAll(".reveal").forEach((element) => element.classList.add("is-visible"));
-  updatePolicyTotal(modules, data.org);
+  updatePolicyTotal(modules, data.org, data.stats);
 };
 
 const buildPolicyRail = (modules) => {
@@ -139,13 +139,13 @@ const buildPolicyRail = (modules) => {
   `;
 };
 
-const updatePolicyTotal = (modules, org) => {
-  const total = modules.reduce((sum, module) => sum + (module.policies?.length || 0), 0);
+const updatePolicyTotal = (modules, org, stats = {}) => {
+  const uploaded = Number.isFinite(Number(stats.uploaded)) ? Number(stats.uploaded) : 0;
   const label = document.querySelector("[data-policy-total]");
   if (label) {
     const moduleCount = modules.length;
-    label.textContent = `${moduleCount} ${moduleCount === 1 ? "module" : "modules"} | ${total} ${
-      total === 1 ? "policy" : "policies"
+    label.textContent = `${moduleCount} ${moduleCount === 1 ? "module" : "modules"} | ${uploaded} ${
+      uploaded === 1 ? "policy" : "policies"
     }`;
   }
   const kicker = document.querySelector(".policy-kicker");

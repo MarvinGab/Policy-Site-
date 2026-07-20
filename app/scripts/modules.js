@@ -1,5 +1,19 @@
 import { listPolicyDocuments } from "../lib/policy-upload.js";
 
+// policyId → cached { url, file_path } | "pending" | null. Populated on
+// hover so double-click has zero latency.
+const prefetchedDocs = new Map();
+
+const prefetchFileBlob = (url) => {
+  if (!url) return;
+  const link = document.createElement("link");
+  link.rel = "prefetch";
+  link.as = "fetch";
+  link.href = url;
+  link.crossOrigin = "anonymous";
+  document.head.appendChild(link);
+};
+
 export const initModules = () => {
   const moduleCards = document.querySelectorAll(".module-card");
   moduleCards.forEach((card, index) => {
@@ -41,6 +55,26 @@ export const initModules = () => {
     const policyId = item.dataset.policyId;
     if (!policyId) return;
     await previewLatestDocument({ policyId, item });
+  });
+
+  // Hover prefetch: as soon as the pointer lingers on a policy row, ask the
+  // server for its signed URL and drop a <link rel="prefetch"> so the browser
+  // starts pulling the PDF from Supabase Storage in the background. When the
+  // user actually double-clicks, both the URL fetch AND the file blob are
+  // usually already cached, so the viewer opens near-instantly.
+  container.addEventListener("mouseover", (event) => {
+    const item = event.target.closest(".policy-item");
+    if (!item) return;
+    const policyId = item.dataset.policyId;
+    if (!policyId || prefetchedDocs.has(policyId)) return;
+    prefetchedDocs.set(policyId, "pending");
+    listPolicyDocuments({ policyId })
+      .then((files) => {
+        const latest = files?.[0];
+        prefetchedDocs.set(policyId, latest || null);
+        if (latest?.url) prefetchFileBlob(latest.url);
+      })
+      .catch(() => prefetchedDocs.delete(policyId));
   });
 
   // Rail search: type-ahead dropdown. As the user types, we build a flat list
@@ -203,16 +237,22 @@ const initRailSearch = (container) => {
 };
 
 const previewLatestDocument = async ({ policyId, item }) => {
-  // Subtle "we're opening this" state — a tiny inline spinner appears next to
-  // the policy name while the fetch is in flight. No big overlay, no toast.
   item?.classList.add("is-opening");
   try {
-    const files = await listPolicyDocuments({ policyId });
-    if (!files.length) {
-      showToast("No files uploaded for this policy.", "info");
-      return;
+    // Hit the hover-prefetch cache first — usually populated by the time
+    // the user has moved from hover to double-click.
+    let latest = null;
+    const cached = prefetchedDocs.get(policyId);
+    if (cached && cached !== "pending") latest = cached;
+    if (!latest) {
+      const files = await listPolicyDocuments({ policyId });
+      if (!files.length) { showToast("No files uploaded for this policy.", "info"); return; }
+      latest = files[0];
+      prefetchedDocs.set(policyId, latest);
     }
-    const latest = files[0];
+    if (!latest) { showToast("No files uploaded for this policy.", "info"); return; }
+    // Skip the outer catch/try for the original files variable
+    const files = [latest];
     const name = latest.file_path ? latest.file_path.split("/").pop() : "Document preview";
     openDocumentViewer({ url: latest.url, name });
   } catch (error) {

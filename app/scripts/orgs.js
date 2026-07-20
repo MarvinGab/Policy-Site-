@@ -37,18 +37,31 @@ const form = document.getElementById("org-create");
 const nameInput = document.getElementById("org-name-input");
 const dialogError = document.getElementById("org-dialog-error");
 
-// Build the per-org subdomain URL from the product root host.
-// Dev: trio.localhost:5183/   Prod: trio.policies.zarohr.com/
-const getRootHost = () => {
-  const { host } = window.location;
-  const localhostIndex = host.indexOf("localhost");
-  if (localhostIndex >= 0) return host.slice(localhostIndex);
-  return host.replace(/^[^.]+\./, "");
+// Build the per-org subdomain URL from the product root host. The server
+// tells us what root host to use via /api/session — parsing the current
+// location breaks in prod (e.g. `policies.zarohr.com` would be misparsed
+// as `zarohr.com`).
+let cachedRootHost = null;
+let cachedRootPort = null;
+const primeRootHost = async () => {
+  if (cachedRootHost !== null) return cachedRootHost;
+  try {
+    const session = await fetchJson("/api/session");
+    cachedRootHost = String(session?.rootHost || window.location.hostname);
+    cachedRootPort = session?.rootPort ? String(session.rootPort) : null;
+  } catch {
+    cachedRootHost = window.location.hostname;
+    cachedRootPort = window.location.port || null;
+  }
+  return cachedRootHost;
 };
+
+const getRootHost = () => cachedRootHost || window.location.hostname;
+const getRootPort = () => (cachedRootPort ? `:${cachedRootPort}` : "");
 
 const orgUrl = (slug) => {
   const { protocol } = window.location;
-  return `${protocol}//${slug}.${getRootHost()}/`;
+  return `${protocol}//${slug}.${getRootHost()}${getRootPort()}/`;
 };
 
 const isLocalRootHost = () => getRootHost().startsWith("localhost");
@@ -114,7 +127,8 @@ const renderList = () => {
         filtered.length
           ? filtered
               .map((org) => {
-                const policies = org.policy_count ?? 0;
+                const totalPolicies = org.policy_count ?? 0;
+                const uploadedPolicies = org.policy_uploaded_count ?? 0;
                 const employees = org.employee_count ?? 0;
                 const admins = org.admin_count ?? 0;
                 return `
@@ -129,9 +143,9 @@ const renderList = () => {
                     <p class="org-card-slug"><span class="slug-prefix">/</span>${escapeHtml(org.slug)}</p>
 
                     <div class="org-stats">
-                      <div class="stat-block">
-                        <span class="stat-value">${policies}</span>
-                        <span class="stat-label">${policies === 1 ? "Policy" : "Policies"}</span>
+                      <div class="stat-block" title="${uploadedPolicies} uploaded of ${totalPolicies}">
+                        <span class="stat-value">${uploadedPolicies}<span class="stat-total">/${totalPolicies}</span></span>
+                        <span class="stat-label">Policies uploaded</span>
                       </div>
                       <div class="stat-block">
                         <span class="stat-value">${employees}</span>
@@ -173,7 +187,11 @@ const render = () => {
 
 const load = async () => {
   try {
+    // Warm the root-host cache before any org-tile click. Runs in parallel
+    // with the org list fetch so it doesn't add latency.
+    const rootHostPromise = primeRootHost();
     allOrgs = await fetchJson("/api/admin/orgs");
+    await rootHostPromise;
     render();
   } catch (error) {
     if (error.message.includes("Not authenticated") || error.message.includes("403")) {

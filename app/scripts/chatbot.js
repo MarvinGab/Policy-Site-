@@ -10,11 +10,18 @@ export const initChatbot = () => {
   const messages = chatbot.querySelector(".chatbot-messages");
   const sendButton = chatbot.querySelector(".chatbot-send");
   const logout = document.getElementById("logout");
-  const history = loadChatHistory();
+  let history = loadChatHistory();
 
   if (messages) {
     renderChatHistory(messages, history);
   }
+
+  resolveChatStorageKey().then((storageKey) => {
+    if (!storageKey || storageKey === activeChatStorageKey) return;
+    activeChatStorageKey = storageKey;
+    history = loadChatHistory();
+    if (messages) renderChatHistory(messages, history);
+  });
 
   const setOpen = (isOpen) => {
     chatbot.classList.toggle("is-open", isOpen);
@@ -58,29 +65,34 @@ export const initChatbot = () => {
     saveChatHistory(history);
     input.value = "";
     const pending = appendMessage(messages, "Thinking...", "bot", { pending: true });
+    const requestHistory = toApiHistory(history).slice(-6);
     messages.scrollTop = messages.scrollHeight;
     fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ question: text }),
+      body: JSON.stringify({ question: text, history: requestHistory }),
     })
       .then(async (response) => {
         if (!response.ok) {
-          const message = await response.text();
+          const contentType = response.headers.get("content-type") || "";
+          const payload = contentType.includes("application/json")
+            ? await response.json().catch(() => null)
+            : null;
+          const message = payload?.answer || payload?.message || await response.text();
           throw new Error(message || "Unable to answer right now.");
         }
         return response.json();
       })
       .then((data) => {
-        const answer = data?.answer || "I don't have enough information to answer that.";
+        const answer = cleanBotMessage(data?.answer || "I don't have enough information to answer that.");
         pending.classList.remove("is-pending");
         pending.textContent = answer;
         history.push({ text: answer, variant: "bot" });
         saveChatHistory(history);
       })
       .catch((error) => {
-        const message = error?.message || "Unable to answer right now.";
+        const message = cleanBotMessage(error?.message || "Unable to answer right now.");
         pending.classList.remove("is-pending");
         pending.textContent = message;
         history.push({ text: message, variant: "bot" });
@@ -95,7 +107,7 @@ export const initChatbot = () => {
   });
 
   logout?.addEventListener("click", () => {
-    localStorage.removeItem(CHAT_STORAGE_KEY);
+    localStorage.removeItem(activeChatStorageKey);
   });
 };
 
@@ -120,14 +132,67 @@ const appendMessage = (container, text, variant, options = {}) => {
   return message;
 };
 
-const CHAT_STORAGE_KEY = "policy-chat-history-v2";
+const CHAT_STORAGE_PREFIX = "policy-chat-history-v5";
+let activeChatStorageKey = `${CHAT_STORAGE_PREFIX}:${window.location.hostname || "local"}`;
+
+const resolveChatStorageKey = async () => {
+  try {
+    const response = await fetch("/api/session", { credentials: "include" });
+    if (!response.ok) return activeChatStorageKey;
+    const session = await response.json();
+    const orgKey = session?.companyId || session?.selectedCompany?.id || window.location.hostname || "local";
+    return `${CHAT_STORAGE_PREFIX}:${orgKey}`;
+  } catch {
+    return activeChatStorageKey;
+  }
+};
+
+const cleanBotMessage = (value = "") => {
+  const text = String(value || "").trim();
+  if (!text) return "Unable to answer right now.";
+  if (text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed?.answer) return cleanBotMessage(parsed.answer);
+      if (parsed?.message) return cleanBotMessage(parsed.message);
+    } catch {
+      // Keep falling through to generic cleanup.
+    }
+  }
+  if (/^failed to fetch$/i.test(text)) {
+    return "The chat connection failed. Please try again.";
+  }
+  return text;
+};
+
+const shouldDropHistoryItem = (item) => {
+  const text = String(item?.text || "").trim();
+  if (!text) return true;
+  return (
+    text === "Unable to answer question." ||
+    /^failed to fetch$/i.test(text) ||
+    /^The chat connection failed/i.test(text) ||
+    /^The chat service took too long to respond/i.test(text) ||
+    /^Not in the uploaded policies/i.test(text) ||
+    /^I could not search the policies right now/i.test(text) ||
+    /^\{"answer":/i.test(text)
+  );
+};
 
 const loadChatHistory = () => {
   try {
-    const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+    const stored = localStorage.getItem(activeChatStorageKey);
     const parsed = stored ? JSON.parse(stored) : [];
     if (Array.isArray(parsed) && parsed.length) {
-      const cleaned = parsed.filter((item) => item?.text !== "Unable to answer question.");
+      const cleaned = parsed
+        .filter((item) => !shouldDropHistoryItem(item))
+        .map((item) => ({
+          ...item,
+          text: item?.variant === "bot" ? cleanBotMessage(item.text) : item.text,
+        }));
+      if (cleaned.length !== parsed.length || cleaned.some((item, index) => item.text !== parsed[index]?.text)) {
+        saveChatHistory(cleaned);
+      }
       return cleaned.length ? cleaned : [{ text: "Hi! How can I help you?", variant: "bot" }];
     }
   } catch (error) {
@@ -138,11 +203,19 @@ const loadChatHistory = () => {
 
 const saveChatHistory = (history) => {
   try {
-    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history));
+    localStorage.setItem(activeChatStorageKey, JSON.stringify(history));
   } catch (error) {
     console.warn("Failed to save chat history:", error);
   }
 };
+
+const toApiHistory = (history = []) =>
+  history
+    .filter((item) => item?.text && (item.variant === "user" || item.variant === "bot"))
+    .map((item) => ({
+      role: item.variant === "bot" ? "assistant" : "user",
+      text: item.text,
+    }));
 
 const renderChatHistory = (container, history) => {
   container.innerHTML = "";

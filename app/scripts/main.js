@@ -1,3 +1,4 @@
+import "./security.js";
 import { initAuth } from "./auth.js";
 import { initHeader } from "./header.js";
 import { initModules } from "./modules.js";
@@ -34,6 +35,7 @@ const ADMIN_TAB_TITLES = {
   modules: "Modules",
   admins: "Admins",
   people: "People",
+  communication: "Communication",
   email: "Email",
   hrms: "HRMS Access",
   settings: "Settings",
@@ -71,6 +73,12 @@ const hydrateHeader = (page) => {
   const headerLinks = document.querySelector('[data-slot="header-links"]');
   const headerCtas = document.querySelector('[data-slot="header-ctas"]');
   if (!headerLinks || !headerCtas) return;
+
+  if (page === "login-only") {
+    headerLinks.innerHTML = "";
+    headerCtas.innerHTML = "";
+    return;
+  }
 
   if (page === "orgs") {
     headerLinks.innerHTML = "";

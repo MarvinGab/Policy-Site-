@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import cookieParser from "cookie-parser";
 import path from "path";
+import fs from "fs";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
@@ -16,15 +17,24 @@ import { ORG_TEMPLATE } from "./org-template.js";
 const NODE_ENV = process.env.NODE_ENV || "development";
 const IS_PRODUCTION = NODE_ENV === "production";
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_SERVICE_ROLE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? null : "dev-session-secret");
 const PORT = Number(process.env.PORT || 5173);
 // The "root" hostname. Anything under "*.<ROOT_HOST>" is treated as a per-org subdomain.
 // Dev default is "localhost"; prod will be e.g. "policies.zarohr.com".
 const ROOT_HOST = (process.env.ROOT_HOST || "localhost").toLowerCase();
+if (IS_PRODUCTION && (ROOT_HOST === "localhost" || ROOT_HOST.endsWith(".localhost"))) {
+  throw new Error("ROOT_HOST must be the production parent domain when NODE_ENV=production.");
+}
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash-lite";
 const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-001";
+const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 18000);
+const CHAT_ENABLE_QUERY_REWRITE = process.env.CHAT_ENABLE_QUERY_REWRITE === "true";
+const CHAT_DAILY_CAP_PER_ORG = Number(process.env.CHAT_DAILY_CAP_PER_ORG || 200);
+const CHAT_CACHE_TTL_MS = Number(process.env.CHAT_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
+const SESSION_STORE = (process.env.SESSION_STORE || (IS_PRODUCTION ? "supabase" : "file")).toLowerCase();
 const HRMS_LAUNCH_SECRET = process.env.HRMS_LAUNCH_SECRET || (IS_PRODUCTION ? "" : SESSION_SECRET);
 // Comma-separated parent origins permitted to iframe this app — e.g.
 // "https://hrms.acme.com,https://app.workday.com". When set, the session
@@ -41,7 +51,7 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
 // Last-resort fallback used only when the password_hash column is missing
 // from org_people. Real employees get a unique random token issued via
 // generateAccessToken() and emailed on creation.
-const DEFAULT_EMPLOYEE_PASSWORD = process.env.DEFAULT_EMPLOYEE_PASSWORD || "ChangeMeOnFirstLogin";
+const SMTP_ENCRYPTION_KEY = process.env.SMTP_ENCRYPTION_KEY || (IS_PRODUCTION ? "" : SESSION_SECRET);
 // Per-user daily chat cap. With 50 active users × 20 = 1000, this stays inside
 // the Gemini free-tier 1000 requests/day ceiling. Super-admin is exempt.
 const CHAT_DAILY_CAP_PER_USER = Number(process.env.CHAT_DAILY_CAP_PER_USER || 20);
@@ -69,9 +79,57 @@ if (!ADMIN_EMAIL || (!ADMIN_PASSWORD && !ADMIN_PASSWORD_HASH)) {
   process.exit(1);
 }
 
+if (IS_PRODUCTION && !SMTP_ENCRYPTION_KEY) {
+  console.error("Missing SMTP_ENCRYPTION_KEY in environment (required in production).");
+  process.exit(1);
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
+
+class SupabaseSessionStore extends session.Store {
+  async get(sid, callback) {
+    try {
+      const { data, error } = await supabase
+        .from("app_sessions")
+        .select("sess, expire")
+        .eq("sid", sid)
+        .maybeSingle();
+      if (error) return callback(error);
+      if (!data || new Date(data.expire).getTime() <= Date.now()) return callback(null, null);
+      return callback(null, data.sess);
+    } catch (error) {
+      return callback(error);
+    }
+  }
+
+  async set(sid, sess, callback) {
+    try {
+      const maxAge = sess?.cookie?.maxAge || 30 * 24 * 60 * 60 * 1000;
+      const expire = new Date(Date.now() + maxAge).toISOString();
+      const { error } = await supabase
+        .from("app_sessions")
+        .upsert({ sid, sess, expire }, { onConflict: "sid" });
+      return callback(error || null);
+    } catch (error) {
+      return callback(error);
+    }
+  }
+
+  async destroy(sid, callback) {
+    try {
+      const { error } = await supabase.from("app_sessions").delete().eq("sid", sid);
+      return callback(error || null);
+    } catch (error) {
+      return callback(error);
+    }
+  }
+
+  async touch(sid, sess, callback) {
+    return this.set(sid, sess, callback);
+  }
+}
 
 const app = express();
 app.disable("x-powered-by");
@@ -136,15 +194,18 @@ if (IS_PRODUCTION) {
 // (no more "logged out every time I save a file"). 30-day cookie lifetime
 // matches the Amazon-style "remember me" we agreed on.
 const FileStore = sessionFileStore(session);
-app.use(
-  session({
-    name: "zarohr.sid",
-    store: new FileStore({
+const sessionStore = SESSION_STORE === "supabase"
+  ? new SupabaseSessionStore()
+  : new FileStore({
       path: path.resolve(fileURLToPath(import.meta.url), "..", "..", ".sessions"),
       ttl: 60 * 60 * 24 * 30, // 30 days, in seconds
       reapInterval: 60 * 60, // clean expired sessions hourly
       retries: 0,
-    }),
+    });
+app.use(
+  session({
+    name: "zarohr.sid",
+    store: sessionStore,
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -162,6 +223,41 @@ app.use(
     },
   })
 );
+
+// Rotate the session identifier whenever authentication succeeds. This prevents
+// a pre-authentication session cookie from being reused after login.
+const establishAuthenticatedSession = async (req, user) => {
+  await new Promise((resolve, reject) => req.session.regenerate((error) => (error ? reject(error) : resolve())));
+  req.session.user = user;
+};
+
+const ensureCsrfToken = (req) => {
+  if (!req.session) return "";
+  if (!req.session.csrfToken) req.session.csrfToken = crypto.randomBytes(24).toString("base64url");
+  return req.session.csrfToken;
+};
+
+const CSRF_EXEMPT_PATHS = new Set([
+  "/api/login",
+  "/api/password/forgot",
+  "/api/password/verify-otp",
+  "/api/password/reset",
+  "/api/hrms/test",
+]);
+
+const requireCsrfToken = (req, res, next) => {
+  if (!["POST", "PATCH", "DELETE", "PUT"].includes(req.method)) return next();
+  if (!req.session?.user) return next();
+  if (CSRF_EXEMPT_PATHS.has(req.path)) return next();
+  const expected = ensureCsrfToken(req);
+  const received = req.get("x-csrf-token") || "";
+  if (!received || received !== expected) {
+    return res.status(403).send("Security token missing or expired. Refresh the page and try again.");
+  }
+  return next();
+};
+
+app.use(requireCsrfToken);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -242,6 +338,13 @@ app.get("/", (req, res, next) => {
   if (req.company) {
     return res.sendFile(path.join(rootDir, "policies.html"));
   }
+  return res.sendFile(path.join(rootDir, "index.html"));
+});
+
+// On any org subdomain, /index.html is the login-only page (no marketing
+// hero, no "how it works"). Root domain still gets the full landing.
+app.get("/index.html", (req, res, next) => {
+  if (req.company) return res.sendFile(path.join(rootDir, "login.html"));
   return next();
 });
 
@@ -252,15 +355,53 @@ const escapeHtml = (value = "") =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 
-app.use(
-  express.static(rootDir, {
-    setHeaders: (res) => {
-      if (!IS_PRODUCTION) {
-        res.setHeader("Cache-Control", "no-store");
-      }
-    },
-  })
-);
+const staticOptions = {
+  dotfiles: "deny",
+  fallthrough: false,
+  setHeaders: (res) => {
+    if (!IS_PRODUCTION) res.setHeader("Cache-Control", "no-store");
+  },
+};
+
+// Only browser assets are public. Never expose the repository root: doing so
+// makes server source, SQL, tests, package metadata, and .git reachable.
+app.use("/app", express.static(path.join(rootDir, "app"), staticOptions));
+app.use("/Images", express.static(path.join(rootDir, "Images"), staticOptions));
+
+const PUBLIC_PAGES = new Set([
+  "index.html",
+  "login.html",
+  "orgs.html",
+  "policies.html",
+  "policy-admin.html",
+]);
+app.get("/:page", (req, res, next) => {
+  if (!PUBLIC_PAGES.has(req.params.page)) return next();
+  return res.sendFile(path.join(rootDir, req.params.page));
+});
+
+// Endpoints that a must_reset_password session is allowed to hit. Everything
+// else is 403'd — the temp password buys you a session, and the ONLY thing
+// that session can do is choose a real password (or log out).
+const RESET_ALLOWED_PATHS = new Set([
+  "/api/password/change",
+  "/api/logout",
+  "/api/session",
+  "/api/auth/context",
+]);
+
+const requirePasswordFresh = (req, res, next) => {
+  if (!req.session?.user?.mustResetPassword) return next();
+  if (RESET_ALLOWED_PATHS.has(req.path)) return next();
+  return res.status(403).json({
+    error: "must_reset_password",
+    message: "Set a new password before continuing.",
+  });
+};
+
+// Global gate: apply the reset lock BEFORE any auth guard runs. Cheap check;
+// no-op when there's no session or the flag is off.
+app.use(requirePasswordFresh);
 
 const requireAuth = (req, res, next) => {
   if (!req.session?.user) {
@@ -282,6 +423,8 @@ const requireAdmin = (req, res, next) => {
 const sanitizeFilename = (name = "") => name.replace(/[^a-zA-Z0-9._-]/g, "_");
 const sanitizeText = (value = "") => String(value).replace(/\s+/g, " ").trim();
 const sanitizeEmail = (value = "") => sanitizeText(value).toLowerCase();
+const sanitizeEmployeeCode = (value = "") => sanitizeText(value).toUpperCase();
+const sanitizeLoginIdentifier = (value = "") => sanitizeText(value).trim();
 const isUuid = (value = "") =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
@@ -300,6 +443,14 @@ const validatePolicyUpload = (file) => {
   const mime = String(file.mimetype || "").toLowerCase();
   if (!allowedMimes.has(mime)) {
     return `File type mismatch. ${ext} files cannot be uploaded as ${mime || "unknown content type"}.`;
+  }
+  const buffer = file.buffer || Buffer.alloc(0);
+  const isPdf = ext === ".pdf" && buffer.subarray(0, 5).toString("ascii") === "%PDF-";
+  const isZipDocx = ext === ".docx" && buffer.subarray(0, 4).toString("hex") === "504b0304";
+  const isOldDoc = ext === ".doc" && buffer.subarray(0, 8).toString("hex") === "d0cf11e0a1b11ae1";
+  const isText = ext === ".txt" && !buffer.subarray(0, Math.min(buffer.length, 1024)).includes(0);
+  if (!isPdf && !isZipDocx && !isOldDoc && !isText) {
+    return "File content does not match the selected file type.";
   }
   return "";
 };
@@ -353,14 +504,27 @@ const fetchGemini = async (path, payload, { maxRetries = 1 } = {}) => {
   }
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${path}?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${path}?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        }
+      );
+    } catch (error) {
+      lastError = new Error(error?.name === "AbortError" ? "Gemini request timed out." : "Gemini request failed.");
+      lastError.status = error?.name === "AbortError" ? 504 : 502;
+      lastError.cause = error;
+      throw lastError;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (response.ok) return response.json();
 
     const message = await response.text();
@@ -438,6 +602,30 @@ const recordChatUsage = async (userId) => {
   return { count, remaining: Math.max(0, CHAT_DAILY_CAP_PER_USER - count) };
 };
 
+const recordOrgChatUsage = async (companyId) => {
+  if (!companyId) return { count: 0, remaining: CHAT_DAILY_CAP_PER_ORG };
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase.rpc("increment_org_chat_usage", {
+    p_company_id: companyId,
+    p_day: today,
+  });
+  if (error) {
+    const { data: existing } = await supabase
+      .from("org_chat_usage")
+      .select("count")
+      .eq("company_id", companyId)
+      .eq("day", today)
+      .maybeSingle();
+    const next = (existing?.count || 0) + 1;
+    await supabase
+      .from("org_chat_usage")
+      .upsert({ company_id: companyId, day: today, count: next }, { onConflict: "company_id,day" });
+    return { count: next, remaining: Math.max(0, CHAT_DAILY_CAP_PER_ORG - next) };
+  }
+  const count = Number(data) || 0;
+  return { count, remaining: Math.max(0, CHAT_DAILY_CAP_PER_ORG - count) };
+};
+
 const peekChatUsage = async (userId) => {
   if (!userId) return 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -450,16 +638,105 @@ const peekChatUsage = async (userId) => {
   return data?.count || 0;
 };
 
+const peekOrgChatUsage = async (companyId) => {
+  if (!companyId) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("org_chat_usage")
+    .select("count")
+    .eq("company_id", companyId)
+    .eq("day", today)
+    .maybeSingle();
+  return data?.count || 0;
+};
+
+const hashValue = (value = "") => crypto.createHash("sha256").update(String(value)).digest("hex");
+
+const encryptSecret = (value = "") => {
+  if (!value) return "";
+  if (!SMTP_ENCRYPTION_KEY) throw new Error("SMTP credential encryption is not configured.");
+  const key = crypto.createHash("sha256").update(SMTP_ENCRYPTION_KEY).digest();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(String(value), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+};
+
+const decryptSecret = (value = "") => {
+  if (!value || !String(value).startsWith("enc:v1:")) return String(value || "");
+  if (!SMTP_ENCRYPTION_KEY) throw new Error("SMTP credential encryption is not configured.");
+  const [, , ivPart, tagPart, encryptedPart] = String(value).split(":");
+  const key = crypto.createHash("sha256").update(SMTP_ENCRYPTION_KEY).digest();
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivPart, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedPart, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
+};
+
+const getPolicyIndexVersion = async (companyId) => {
+  const [{ count: docCount }, { count: chunkCount }, { data: latestDoc }, { data: latestChunk }] = await Promise.all([
+    supabase.from("policy_documents").select("id", { count: "exact", head: true }).eq("company_id", companyId),
+    supabase.from("policy_chunks").select("id", { count: "exact", head: true }).eq("company_id", companyId),
+    supabase.from("policy_documents").select("created_at").eq("company_id", companyId).order("created_at", { ascending: false }).limit(1),
+    supabase.from("policy_chunks").select("created_at").eq("company_id", companyId).order("created_at", { ascending: false }).limit(1),
+  ]);
+  return hashValue(JSON.stringify({
+    docCount: docCount || 0,
+    chunkCount: chunkCount || 0,
+    latestDoc: latestDoc?.[0]?.created_at || "",
+    latestChunk: latestChunk?.[0]?.created_at || "",
+  }));
+};
+
+const getCachedAnswer = async ({ companyId, questionHash, indexVersion }) => {
+  const { data, error } = await supabase
+    .from("chat_answer_cache")
+    .select("answer, sources, created_at")
+    .eq("company_id", companyId)
+    .eq("question_hash", questionHash)
+    .eq("index_version", indexVersion)
+    .maybeSingle();
+  if (error || !data) return null;
+  if (new Date(data.created_at).getTime() + CHAT_CACHE_TTL_MS < Date.now()) return null;
+  return data;
+};
+
+const setCachedAnswer = async ({ companyId, questionHash, indexVersion, answer, sources }) => {
+  await supabase.from("chat_answer_cache").upsert({
+    company_id: companyId,
+    question_hash: questionHash,
+    index_version: indexVersion,
+    answer,
+    sources: sources || [],
+    created_at: new Date().toISOString(),
+  }, { onConflict: "company_id,question_hash,index_version" });
+};
+
 const chatWithGemini = async (prompt) => {
   const result = await fetchGemini(`${GEMINI_CHAT_MODEL}:generateContent`, {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.25,
       topP: 0.9,
-      maxOutputTokens: 650,
+      maxOutputTokens: 300,
     },
   });
   return result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+};
+
+const isIncompleteAiAnswer = (answer = "") => {
+  const text = String(answer || "").trim();
+  if (!text) return true;
+  if (/^source\s+\d+\b/i.test(text)) return true;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 5) return true;
+  if (/[,:;]$/.test(text)) return true;
+  if (/\b(is|are|to|for|with|and|or|of|in|the|a|an)$/i.test(text)) return true;
+  if (/\b(entitled to|equal to|up to|at least|maximum of|minimum of)\s+\d+$/i.test(text)) return true;
+  return false;
 };
 
 // Rewrites a vague user question into a single retrieval-optimized phrase
@@ -539,18 +816,81 @@ const RESERVED_SLUGS = new Set([
 const isReservedSlug = (slug) => RESERVED_SLUGS.has(String(slug || "").toLowerCase());
 
 const generateAccessToken = () => crypto.randomBytes(18).toString("base64url");
+// Absolute path to the session-file-store directory. Used by the delete
+// flow to invalidate any live server-side session belonging to a user we
+// just removed. Kept in sync with the FileStore config above.
+const SESSIONS_DIR = path.resolve(fileURLToPath(import.meta.url), "..", "..", ".sessions");
 
-const getRootBaseUrl = (req) => `${req.protocol}://${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}`;
+// Delete every persisted session file whose user.id matches one of the
+// supplied ids. Best-effort: parse errors and unrelated files are ignored.
+const nukeSessionsForUsers = async (userIds) => {
+  const targets = new Set((userIds || []).filter(Boolean).map(String));
+  if (!targets.size) return 0;
+  let removed = 0;
+  let files;
+  try {
+    files = await fs.promises.readdir(SESSIONS_DIR);
+  } catch (err) {
+    if (err.code === "ENOENT") return 0;
+    console.warn("Session dir read failed:", err.message);
+    return 0;
+  }
+  await Promise.all(
+    files
+      .filter((name) => name.endsWith(".json"))
+      .map(async (name) => {
+        const full = path.join(SESSIONS_DIR, name);
+        try {
+          const raw = await fs.promises.readFile(full, "utf8");
+          const data = JSON.parse(raw);
+          const sessionUserId = String(data?.user?.id || "");
+          if (sessionUserId && targets.has(sessionUserId)) {
+            await fs.promises.unlink(full);
+            removed += 1;
+          }
+        } catch { /* corrupt/partial session file — ignore */ }
+      })
+  );
+  return removed;
+};
 
-const buildHrmsCanonicalPayload = ({ org, email, exp, name = "", role = "employee", externalId = "" }) =>
-  [
-    `org=${slugify(org)}`,
-    `email=${sanitizeEmail(email)}`,
-    `exp=${String(exp || "")}`,
-    `name=${sanitizeText(name || "")}`,
-    `role=${role === "admin" ? "admin" : "employee"}`,
-    `external_id=${sanitizeText(externalId || "")}`,
+const generateTemporaryPassword = () => crypto.randomBytes(9).toString("base64url");
+
+// Temp passwords issued at invite time live for a week. After that the
+// employee must ask for a fresh invite / password reset. Long enough to
+// survive vacation, short enough that dormant credentials in inboxes rot.
+const TEMP_PASSWORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const tempPasswordExpiryIso = () => new Date(Date.now() + TEMP_PASSWORD_TTL_MS).toISOString();
+const generateOtp = () => String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+const hashOtp = (otp) => crypto.createHash("sha256").update(String(otp)).digest("hex");
+
+const getAppProtocol = (req) => (IS_PRODUCTION ? "https" : req.protocol);
+const getRootBaseUrl = (req) => `${getAppProtocol(req)}://${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}`;
+
+// Canonical string signed by both sides of the HRMS handoff. Each field is
+// URL-encoded before joining so that a value can't inject a delimiter or a
+// key=value pair to shift boundaries (e.g. `name = "Bob\nrole=admin"`).
+// Order is fixed and every field appears exactly once.
+const buildHrmsCanonicalPayload = ({ org, email, exp, name = "", role = "employee", externalId = "" }) => {
+  const safeRole = role === "admin" ? "admin" : "employee";
+  return [
+    `org=${encodeURIComponent(slugify(org))}`,
+    `email=${encodeURIComponent(sanitizeEmail(email))}`,
+    `exp=${encodeURIComponent(String(exp || ""))}`,
+    `name=${encodeURIComponent(sanitizeText(name || ""))}`,
+    `role=${encodeURIComponent(safeRole)}`,
+    `external_id=${encodeURIComponent(sanitizeText(externalId || ""))}`,
   ].join("\n");
+};
+
+// Coerce a query-string field to a single scalar. If Express handed us an
+// array (attacker sent `role=employee&role=admin`), refuse — we can't tell
+// which value the signer intended.
+const singleQueryParam = (value) => {
+  if (Array.isArray(value)) return null;
+  if (value == null) return "";
+  return String(value);
+};
 
 const signHrmsLaunch = (payload, secret = HRMS_LAUNCH_SECRET) =>
   crypto.createHmac("sha256", secret).update(payload).digest("hex");
@@ -629,7 +969,7 @@ const sendOrgAdminInvite = async ({ to, name, orgName, orgSlug, password, req })
       pass: GLOBAL_SMTP.pass,
     },
   });
-  const loginUrl = `${req.protocol}://${orgSlug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/index.html#login`;
+  const loginUrl = `${getAppProtocol(req)}://${orgSlug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/index.html#login`;
   const displayName = name || to;
   await transporter.sendMail({
     from: `"${GLOBAL_SMTP.fromName}" <${GLOBAL_SMTP.from}>`,
@@ -657,15 +997,16 @@ const buildOrgTransport = async ({ companyId, orgName }) => {
     .eq("company_id", companyId)
     .maybeSingle();
 
+  const smtpPassword = orgSmtp?.password ? decryptSecret(orgSmtp.password) : "";
   const useOrgSmtp =
-    orgSmtp && orgSmtp.host && orgSmtp.username && orgSmtp.password && (orgSmtp.from_email || orgSmtp.username);
+    orgSmtp && orgSmtp.host && orgSmtp.username && smtpPassword && (orgSmtp.from_email || orgSmtp.username);
 
   if (useOrgSmtp) {
     const transporter = nodemailer.createTransport({
       host: orgSmtp.host,
       port: Number(orgSmtp.port) || 587,
       secure: Number(orgSmtp.port) === 465,
-      auth: { user: orgSmtp.username, pass: orgSmtp.password },
+      auth: { user: orgSmtp.username, pass: smtpPassword },
     });
     const fromName = orgSmtp.from_name || orgName;
     return { transporter, from: `"${fromName}" <${orgSmtp.from_email || orgSmtp.username}>` };
@@ -711,17 +1052,17 @@ const ensurePendingLoginCookie = (req, res) => {
 };
 
 const buildOrgLoginUrl = (req, orgSlug, path = "") => {
-  if (!IS_PRODUCTION && req.hostname === ROOT_HOST) return `/${path}`.replace(/^\/+/, "/");
-  return `${req.protocol}://${orgSlug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/${path}`.replace(/(?<!:)\/+/g, "/");
+  return `${getAppProtocol(req)}://${orgSlug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/${path}`.replace(/(?<!:)\/+/g, "/");
 };
 
 const sendMagicLink = async ({ companyId, orgName, orgSlug, to, name, kind, req, res }) => {
   const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = hashValue(token);
   const browserId = ensurePendingLoginCookie(req, res);
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MS[kind]).toISOString();
 
   const { error: insertError } = await supabase.from("magic_tokens").insert({
-    token,
+    token: tokenHash,
     company_id: companyId,
     email: String(to).trim().toLowerCase(),
     kind,
@@ -748,6 +1089,75 @@ const sendMagicLink = async ({ companyId, orgName, orgSlug, to, name, kind, req,
       `${orgName}`,
   });
   return { token, linkUrl };
+};
+
+// Fill {{placeholders}} in the HR-editable invite draft. Unknown tokens are
+// left as-is so a typo doesn't silently drop content.
+const applyEmailDraftPlaceholders = (template, vars) =>
+  String(template || "").replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (match, key) =>
+    Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key] ?? "") : match
+  );
+
+const DEFAULT_INVITE_SUBJECT = "Your {{org_name}} policy portal access";
+const DEFAULT_INVITE_BODY =
+  "Hi {{name}},\n\n" +
+  "You've been added to the {{org_name}} policy portal.\n\n" +
+  "Login URL: {{login_url}}\n" +
+  "Employee code: {{employee_code}}\n" +
+  "Temporary password: {{password}}\n\n" +
+  "If you did not expect this email, contact your HR team.\n\n" +
+  "{{org_name}}";
+
+const sendEmployeeCredentials = async ({ companyId, orgName, orgSlug, to, name, employeeCode, password, req }) => {
+  const { transporter, from } = await buildOrgTransport({ companyId, orgName });
+  const loginUrl = buildOrgLoginUrl(req, orgSlug, "index.html#login");
+  const displayName = name || to;
+  // Prefer the active reusable template. Keep the legacy draft as a
+  // compatibility fallback for organizations created before templates.
+  const [{ data: templateRow }, { data: legacyDraft }] = await Promise.all([
+    supabase
+      .from("org_email_templates")
+      .select("subject, body")
+      .eq("company_id", companyId)
+      .eq("is_default", true)
+      .maybeSingle(),
+    supabase
+      .from("org_email_drafts")
+      .select("subject, body")
+      .eq("company_id", companyId)
+      .maybeSingle(),
+  ]);
+  const emailRow = templateRow || legacyDraft;
+  const draftSubject = emailRow?.subject?.trim() || DEFAULT_INVITE_SUBJECT;
+  const draftBody = emailRow?.body?.trim() || DEFAULT_INVITE_BODY;
+  const vars = {
+    name: displayName,
+    employee_code: employeeCode,
+    password,
+    login_url: loginUrl,
+    org_name: orgName,
+  };
+  await transporter.sendMail({
+    from,
+    to,
+    subject: applyEmailDraftPlaceholders(draftSubject, vars),
+    text: applyEmailDraftPlaceholders(draftBody, vars),
+  });
+};
+
+const sendPasswordResetOtp = async ({ companyId, orgName, to, name, otp }) => {
+  const { transporter, from } = await buildOrgTransport({ companyId, orgName });
+  const displayName = name || to;
+  await transporter.sendMail({
+    from,
+    to,
+    subject: `Reset your ${orgName} policy portal password`,
+    text:
+      `Hi ${displayName},\n\n` +
+      `Your password reset OTP is ${otp}.\n\n` +
+      `This OTP is valid for 10 minutes. If you did not request it, ignore this email.\n\n` +
+      `${orgName}`,
+  });
 };
 
 const resolveLoginCompany = async ({ organization, company, email }) => {
@@ -897,120 +1307,262 @@ const uploadLimiter = rateLimit({
   message: "Too many uploads in a short time. Please slow down.",
 });
 
-// Unified login. Two paths:
-//   1. Super-admin: email + password from .env → password session, redirect to /orgs.html.
-//   2. Everyone else (org admin / employee): email only → magic link emailed,
-//      response carries { magic_link_sent: true } so the form shows
-//      "Check your inbox." A password sent for a non-super-admin email is
-//      simply ignored — those accounts are passwordless.
+// Unified login.
+//   1. Root: super-admin email + password, or org-admin email + password.
+//   2. Org standalone subdomain: employee code/email + password.
+//   3. Org HRMS mode: disabled here; the HRMS signed launch owns auth.
 app.post("/api/login", loginLimiter, async (req, res) => {
   const { email, userid, password, remember, organization } = req.body || {};
-  const identifier = String(email || userid || "").trim().toLowerCase();
+  const rawIdentifier = sanitizeLoginIdentifier(email || userid || "");
+  const identifier = rawIdentifier.toLowerCase();
   if (!identifier) {
-    return res.status(400).send("Email is required.");
+    return res.status(400).send("Employee code or email is required.");
   }
 
-  if (identifier === ADMIN_EMAIL && await isSuperAdminPasswordValid(password)) {
-    req.session.user = {
-      id: "admin",
-      email: ADMIN_EMAIL,
-      role: "super_admin",
-      companyId: null,
-    };
-    if (remember === false) {
-      req.session.cookie.expires = false;
-      req.session.cookie.maxAge = null;
+  // --- Subdomain path (org context resolved via Host header) ---
+  // Employee/admin standalone login: email/code + password against org_people.
+  if (req.company?.id) {
+    if ((req.company.access_mode || "standalone") === "hrms_link") {
+      return res
+        .status(403)
+        .send("This organization signs in through your HRMS. Open the policy portal from there.");
     }
-    const rootUrl = `${req.protocol}://${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/orgs.html`;
-    return res.json({ role: "super_admin", email: ADMIN_EMAIL, redirect: rootUrl });
-  }
-
-  // Org-admin password path — root-domain login. An admin row in org_people
-  // with a password_hash matches here. Employees never have a password_hash
-  // (they're passwordless / magic-link only) so they can't auth here.
-  if (password) {
-    const { data: adminRow } = await supabase
+    if (!password) return res.status(400).send("Password is required.");
+    const code = sanitizeEmployeeCode(rawIdentifier);
+    const { data: rows, error: lookupError } = await supabase
       .from("org_people")
-      .select("id, company_id, email, name, role, status, password_hash, companies(id, name, slug)")
-      .eq("email", identifier)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (adminRow && adminRow.status !== "disabled" && adminRow.password_hash) {
-      const ok = await bcrypt.compare(password, adminRow.password_hash);
+      .select("id, company_id, employee_code, email, name, role, status, password_hash, must_reset_password, password_expires_at, companies(id, name, slug)")
+      .eq("company_id", req.company.id)
+      .neq("status", "disabled");
+    if (lookupError) {
+      console.error("Employee auth lookup failed:", lookupError);
+      return res.status(500).send("Sign-in failed.");
+    }
+    const personRow = (rows || []).find((row) =>
+      row.email === identifier || sanitizeEmployeeCode(row.employee_code || "") === code
+    );
+    if (personRow && personRow.password_hash) {
+      const ok = await bcrypt.compare(password, personRow.password_hash);
       if (ok) {
-        const co = adminRow.companies || {};
-        req.session.user = {
-          id: adminRow.id,
-          email: adminRow.email,
-          name: adminRow.name || adminRow.email,
-          role: "admin",
-          companyId: adminRow.company_id,
+        if (
+          personRow.must_reset_password &&
+          personRow.password_expires_at &&
+          new Date(personRow.password_expires_at).getTime() < Date.now()
+        ) {
+          return res.status(401).json({
+            error: "temp_password_expired",
+            message: "Your invite has expired. Ask your admin to re-send it.",
+          });
+        }
+        const co = personRow.companies || req.company;
+        await establishAuthenticatedSession(req, {
+          id: personRow.id,
+          email: personRow.email,
+          employeeCode: personRow.employee_code || null,
+          name: personRow.name || personRow.email,
+          role: personRow.role === "admin" ? "admin" : "employee",
+          companyId: personRow.company_id,
           selectedCompany: { id: co.id, name: co.name, slug: co.slug },
-        };
+          authSource: "password",
+          mustResetPassword: personRow.must_reset_password === true,
+        });
         if (remember === false) {
           req.session.cookie.expires = false;
           req.session.cookie.maxAge = null;
         }
-        const dest = !IS_PRODUCTION && req.hostname === ROOT_HOST
-          ? "/policy-admin.html"
-          : `${req.protocol}://${co.slug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/policy-admin.html`;
-        return res.json({ role: "admin", email: adminRow.email, org: co, redirect: dest });
+        const dest = personRow.must_reset_password
+          ? "/index.html#reset-password"
+          : personRow.role === "admin" ? "/policy-admin.html" : "/policies.html";
+        return res.json({
+          role: req.session.user.role,
+          email: personRow.email,
+          must_reset_password: personRow.must_reset_password === true,
+          csrfToken: ensureCsrfToken(req),
+          redirect: dest,
+        });
       }
     }
-    // Password was supplied but didn't match anything → reject explicitly.
-    // Don't fall through to the magic-link path; that would be confusing.
-    return res.status(401).send("Email or password is wrong.");
+    return res.status(401).send("Employee code/email or password is wrong.");
   }
 
-  // Magic-link path: find the org via the email (or explicit org), check that
-  // the email is on that org's allowlist, then email a one-time link.
-  const company = await resolveLoginCompany({ organization, company: req.company, email: identifier });
+  // --- Root-domain path ---
+  // Super admin has an email + password login here. Anyone else is asked
+  // for their organization and routed to that org's subdomain login. We
+  // deliberately do NOT verify that the identifier belongs to the org at
+  // this stage — that would leak "yes this email is on CompanyX's list",
+  // a cross-org enumeration oracle.
+  if (identifier === ADMIN_EMAIL) {
+    if (!password) return res.status(400).send("Password is required.");
+    if (!(await isSuperAdminPasswordValid(password))) {
+      return res.status(401).send("Email or password is wrong.");
+    }
+    await establishAuthenticatedSession(req, { id: "admin", email: ADMIN_EMAIL, role: "super_admin", companyId: null });
+    if (remember === false) {
+      req.session.cookie.expires = false;
+      req.session.cookie.maxAge = null;
+    }
+    const rootUrl = `${getAppProtocol(req)}://${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}/orgs.html`;
+    return res.json({ role: "super_admin", email: ADMIN_EMAIL, csrfToken: ensureCsrfToken(req), redirect: rootUrl });
+  }
+
+  // Root-domain login: resolve the org and redirect to its subdomain login.
+  // We deliberately do NOT verify that the identifier belongs to that org
+  // here — doing so would turn this endpoint into a cross-org enumeration
+  // oracle ("yes, alice@x.com works at CompanyY"). Any real "bad email/
+  // password" verdict must happen ON the subdomain, uniformly, after the
+  // user submits credentials there.
+  const orgValue = sanitizeText(organization || "");
+  if (!orgValue) {
+    return res.status(400).json({ error: "org_required", message: "Enter your organization name." });
+  }
+
+  const company = await resolveLoginCompany({ organization: orgValue, company: null, email: null });
   if (!company) {
-    return res.status(404).send("This email isn't on the access list. Contact your admin.");
+    return res.status(404).send("Organization not found. Check the name with your admin.");
   }
-
-  // Lock-down: in hrms_link mode the HRMS owns auth. Email magic-link path is
-  // explicitly disabled so the org has exactly one entry point.
   if ((company.access_mode || "standalone") === "hrms_link") {
     return res
       .status(403)
       .send("This organization signs in through your HRMS. Open the policy portal from there.");
   }
 
-  const { data: person, error: personError } = await supabase
+  const subdomainBase = `${getAppProtocol(req)}://${company.slug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}`;
+  const redirect = `${subdomainBase}/index.html#login?identifier=${encodeURIComponent(rawIdentifier)}`;
+  return res.json({ org: { name: company.name, slug: company.slug }, redirect });
+});
+
+const findOrgPersonByIdentifier = async ({ companyId, identifier }) => {
+  const raw = sanitizeLoginIdentifier(identifier || "");
+  const email = raw.toLowerCase();
+  const code = sanitizeEmployeeCode(raw);
+  const { data, error } = await supabase
     .from("org_people")
-    .select("id, email, name, role, status")
-    .eq("company_id", company.id)
-    .eq("email", identifier)
-    .maybeSingle();
-  if (personError) {
-    console.error("Auth lookup failed:", personError);
-    return res.status(500).send("Sign-in failed.");
+    .select("id, company_id, employee_code, email, name, role, status, password_hash")
+    .eq("company_id", companyId)
+    .neq("status", "disabled");
+  if (error) throw error;
+  return (data || []).find((row) => row.email === email || sanitizeEmployeeCode(row.employee_code || "") === code) || null;
+};
+
+const maskEmail = (email = "") => {
+  const [local, domain] = String(email).split("@");
+  if (!local || !domain) return email;
+  const head = local.slice(0, 2);
+  return `${head}${"*".repeat(Math.max(2, local.length - 2))}@${domain}`;
+};
+
+app.post("/api/password/forgot", loginLimiter, async (req, res) => {
+  if (!req.company?.id) return res.status(400).send("Open your organization's login page to reset a password.");
+  if ((req.company.access_mode || "standalone") === "hrms_link") {
+    return res.status(403).send("This organization signs in through your HRMS.");
   }
-  if (!person || person.status === "disabled") {
-    return res.status(404).send("This email isn't on the access list. Contact your admin.");
+  const identifier = sanitizeLoginIdentifier(req.body?.identifier || req.body?.email || req.body?.userid || "");
+  if (!identifier) return res.status(400).send("Employee code or email is required.");
+
+  try {
+    const person = await findOrgPersonByIdentifier({ companyId: req.company.id, identifier });
+    if (!person) {
+      return res.json({ ok: true, message: "If this account exists, an OTP has been sent." });
+    }
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const { error } = await supabase.from("password_reset_otps").insert({
+      company_id: req.company.id,
+      person_id: person.id,
+      otp_hash: hashOtp(otp),
+      expires_at: expiresAt,
+    });
+    if (error) throw error;
+    await sendPasswordResetOtp({
+      companyId: req.company.id,
+      orgName: req.company.name,
+      to: person.email,
+      name: person.name,
+      otp,
+    });
+    return res.json({ ok: true, sent_to: maskEmail(person.email) });
+  } catch (error) {
+    console.error("Password reset OTP failed:", error);
+    return res.json({ ok: true, message: "If this account exists, an OTP has been sent." });
+  }
+});
+
+app.post("/api/password/verify-otp", loginLimiter, async (req, res) => {
+  if (!req.company?.id) return res.status(400).send("Open your organization's login page to reset a password.");
+  const identifier = sanitizeLoginIdentifier(req.body?.identifier || req.body?.email || req.body?.userid || "");
+  const otp = sanitizeText(req.body?.otp || "");
+  if (!identifier || !/^\d{6}$/.test(otp)) return res.status(400).send("Enter the 6-digit OTP.");
+
+  try {
+    const person = await findOrgPersonByIdentifier({ companyId: req.company.id, identifier });
+    if (!person) return res.status(401).send("OTP is invalid or expired.");
+    const { data: otps, error } = await supabase
+      .from("password_reset_otps")
+      .select("id, otp_hash, expires_at, used_at, created_at")
+      .eq("company_id", req.company.id)
+      .eq("person_id", person.id)
+      .is("used_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    const row = otps?.[0];
+    if (!row || new Date(row.expires_at).getTime() < Date.now() || row.otp_hash !== hashOtp(otp)) {
+      return res.status(401).send("OTP is invalid or expired.");
+    }
+    const usedAt = new Date().toISOString();
+    const { data: consumedRows, error: burnError } = await supabase
+      .from("password_reset_otps")
+      .update({ used_at: usedAt })
+      .eq("id", row.id)
+      .is("used_at", null)
+      .select("id");
+    if (burnError) throw burnError;
+    if (!consumedRows?.length) return res.status(401).send("OTP is invalid or expired.");
+
+    const resetToken = crypto.randomBytes(32).toString("base64url");
+    req.session.passwordResetGrant = {
+      companyId: req.company.id,
+      personId: person.id,
+      tokenHash: hashValue(resetToken),
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    };
+    return res.json({ ok: true, reset_token: resetToken });
+  } catch (error) {
+    console.error("OTP verification failed:", error);
+    return res.status(500).send("Could not verify OTP.");
+  }
+});
+
+app.post("/api/password/reset", loginLimiter, async (req, res) => {
+  if (!req.company?.id) return res.status(400).send("Open your organization's login page to reset a password.");
+  const resetToken = String(req.body?.reset_token || "");
+  const nextPassword = String(req.body?.password || "");
+  if (!resetToken || !nextPassword) return res.status(400).send("Verify your OTP before setting a new password.");
+  if (nextPassword.length < 8) return res.status(400).send("Password must be at least 8 characters.");
+
+  const grant = req.session?.passwordResetGrant;
+  const validGrant = grant
+    && grant.companyId === req.company.id
+    && grant.expiresAt > Date.now()
+    && grant.tokenHash === hashValue(resetToken);
+  if (!validGrant) {
+    if (req.session) delete req.session.passwordResetGrant;
+    return res.status(401).send("OTP verification has expired. Request a new OTP.");
   }
 
   try {
-    const { linkUrl } = await sendMagicLink({
-      companyId: company.id,
-      orgName: company.name,
-      orgSlug: company.slug,
-      to: identifier,
-      name: person.name,
-      kind: "recovery",
-      req,
-      res,
-    });
-    return res.json({
-      magic_link_sent: true,
-      email: identifier,
-      // In dev surface the URL so you can click it without checking email.
-      ...(IS_PRODUCTION ? {} : { dev_link: linkUrl }),
-    });
+    const passwordHash = await bcrypt.hash(nextPassword, 10);
+    const { error: updateError } = await supabase
+      .from("org_people")
+      .update({ password_hash: passwordHash, must_reset_password: false, password_expires_at: null, status: "active" })
+      .eq("id", grant.personId)
+      .eq("company_id", req.company.id);
+    if (updateError) throw updateError;
+    delete req.session.passwordResetGrant;
+    return res.json({ ok: true });
   } catch (error) {
-    console.error("Magic-link send failed:", error);
-    return res.status(500).send(error.message || "Could not send sign-in link.");
+    console.error("Password reset failed:", error);
+    return res.status(500).send(error.message || "Could not reset password.");
   }
 });
 
@@ -1024,18 +1576,29 @@ app.get("/auth/link", async (req, res) => {
   const failTo = (slug, errorCode) => {
     const base = !IS_PRODUCTION && req.hostname === ROOT_HOST
       ? "/index.html"
-      : `${req.protocol}://${slug || req.hostname}${IS_PRODUCTION ? "" : `:${PORT}`}/index.html`;
+      : `${getAppProtocol(req)}://${slug || req.hostname}${IS_PRODUCTION ? "" : `:${PORT}`}/index.html`;
     return res.redirect(303, `${base}?login_error=${errorCode}#login`);
   };
 
   const token = String(req.query.token || "");
   if (!token) return failTo(null, "missing");
 
-  const { data: row, error } = await supabase
+  const tokenHash = hashValue(token);
+  let { data: row, error } = await supabase
     .from("magic_tokens")
     .select("token, company_id, email, kind, browser_id, expires_at, used_at")
-    .eq("token", token)
+    .eq("token", tokenHash)
     .maybeSingle();
+  // Temporary compatibility for links issued before tokens were hashed.
+  if (!error && !row) {
+    const legacy = await supabase
+      .from("magic_tokens")
+      .select("token, company_id, email, kind, browser_id, expires_at, used_at")
+      .eq("token", token)
+      .maybeSingle();
+    row = legacy.data;
+    error = legacy.error;
+  }
   if (error) {
     console.error("Magic token lookup failed:", error);
     if (/magic_tokens/.test(error.message || "")) {
@@ -1076,7 +1639,7 @@ app.get("/auth/link", async (req, res) => {
     .update({ used_at: new Date().toISOString() })
     .eq("token", token);
 
-  req.session.user = {
+  await establishAuthenticatedSession(req, {
     id: person.id,
     email: person.email,
     name: person.name || person.email,
@@ -1084,13 +1647,13 @@ app.get("/auth/link", async (req, res) => {
     companyId: company.id,
     selectedCompany: company,
     authSource: "magic_link",
-  };
+  });
 
   const redirectPath = person.role === "admin" ? "/policy-admin.html" : "/policies.html";
   // Always land on the org subdomain for the dashboard.
   const dest = !IS_PRODUCTION && req.hostname === ROOT_HOST
     ? redirectPath
-    : `${req.protocol}://${company.slug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}${redirectPath}`;
+    : `${getAppProtocol(req)}://${company.slug}.${ROOT_HOST}${IS_PRODUCTION ? "" : `:${PORT}`}${redirectPath}`;
   return res.redirect(303, dest);
 });
 
@@ -1160,13 +1723,14 @@ app.get("/api/admin/config", requireSuperAdmin, async (req, res) => {
 app.get("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
   // Fetch orgs + per-org counts in parallel. Employees/admins come from
   // org_people (the real source now that magic-link auth is the standard).
-  const [orgsResp, peopleResp, policiesResp] = await Promise.all([
+  const [orgsResp, peopleResp, policiesResp, documentsResp] = await Promise.all([
     supabase
       .from("companies")
       .select("id, name, slug, access_token, access_mode, created_at")
       .order("created_at", { ascending: false }),
     supabase.from("org_people").select("company_id, role").neq("status", "disabled"),
-    supabase.from("org_policies").select("company_id"),
+    supabase.from("org_policies").select("id, company_id"),
+    supabase.from("policy_documents").select("policy_id, company_id"),
   ]);
 
   if (orgsResp.error) {
@@ -1181,17 +1745,22 @@ app.get("/api/admin/orgs", requireSuperAdmin, async (req, res) => {
     const map = row.role === "admin" ? adminCounts : employeeCounts;
     map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
   }
-  const policyCounts = new Map();
-  for (const row of policiesResp.data || []) {
-    if (!row.company_id) continue;
-    policyCounts.set(row.company_id, (policyCounts.get(row.company_id) || 0) + 1);
+  // Per-company total policy count.
+  // Per-company total + per-company set of policy IDs with at least one
+  // uploaded document (deduped so multi-version policies count once).
+  const total = new Map(), uploaded = new Map();
+  for (const r of policiesResp.data || []) total.set(r.company_id, (total.get(r.company_id) || 0) + 1);
+  for (const r of documentsResp.data || []) {
+    if (!uploaded.has(r.company_id)) uploaded.set(r.company_id, new Set());
+    uploaded.get(r.company_id).add(r.policy_id);
   }
 
   const enriched = (orgsResp.data || []).map((o) => ({
     ...o,
     employee_count: employeeCounts.get(o.id) || 0,
     admin_count: adminCounts.get(o.id) || 0,
-    policy_count: policyCounts.get(o.id) || 0,
+    policy_count: total.get(o.id) || 0,
+    policy_uploaded_count: uploaded.get(o.id)?.size || 0,
   }));
   return res.json(enriched);
 });
@@ -1402,7 +1971,7 @@ const baseLookupTokens = (value = "") => {
   return normalizeLookup(value)
     .split(/\s+/)
     .map((token) => token.replace(/ies$/, "y").replace(/s$/, ""))
-    .filter((token) => token.length > 2 && !stopWords.has(token));
+    .filter((token) => (token.length > 2 || ["pl", "sl", "cl", "el", "pf"].includes(token)) && !stopWords.has(token));
 };
 
 const lookupTokens = (value = "") => {
@@ -1411,13 +1980,14 @@ const lookupTokens = (value = "") => {
 
 const expandHrTerms = (value = "") => {
   const expansions = [
-    [/sick|illness|ill|medical leave|casual leave|earned leave|paid leave|leave|absent|absence|attendance|holiday|vacation/g, " leave attendance holiday time away"],
+    [/\bpl\b|privilege leave|annual leave|earned leave|paid leave/g, " privilege leave pl annual leave entitlement time away"],
+    [/\bsl\b|sick|illness|ill|medical leave|casual leave|leave|absent|absence|attendance|holiday|vacation/g, " leave attendance holiday time away"],
     [/work from home|wfh|remote work|remote|hybrid/g, " attendance employment work arrangement"],
     [/fire|safety|accident|hazard|emergency/g, " safety health fire accident"],
     [/salary|pay|wage|compensation|bonus|benefit|loan|gratuity|lta|pension/g, " pay compensation benefits salary"],
     [/training|learning|performance|appraisal|review/g, " learning performance training"],
     [/recruit|onboard|joining|intern|trainee|employment|contract/g, " life work employment onboarding"],
-    [/posh|harassment|conduct|conflict|whistle|ethic|insider|relative|marriage/g, " conduct ethics posh conflict"],
+    [/posh|harassment|conduct|conflict|whistle|ethic|insider|relative|marriage|punish|punishment|penalty|penalties|sanction|violation|disciplinary/g, " conduct ethics posh conflict sanction violation disciplinary penalty"],
     [/internet|phone|telephone|fuel|car|book|periodical|reimburse|allowance/g, " tools allowance reimbursement"],
   ];
   return expansions.reduce((text, [pattern, replacement]) => text.replace(pattern, (match) => `${match} ${replacement}`), value);
@@ -1579,6 +2149,233 @@ const summarizeMatchedPolicyAreas = (matches = [], modules = []) => {
     .join("\n");
 };
 
+const scorePolicyChunkForQuestion = (chunkText = "", question = "") => {
+  const questionTokens = lookupTokens(question);
+  if (!questionTokens.length) return 0;
+  const chunkTokens = lookupTokens(chunkText);
+  const chunkTokenSet = new Set(chunkTokens);
+  const chunkLookup = chunkTokens.join(" ");
+  return questionTokens.reduce((score, token) => {
+    if (chunkTokenSet.has(token)) return score + 4;
+    if (chunkLookup.includes(token)) return score + 1;
+    return score;
+  }, 0);
+};
+
+const fetchFocusedPolicyChunks = async ({ companyId, policyAreas = [], question, limit = 4 }) => {
+  const policyIds = Array.from(
+    new Set(
+      policyAreas
+        .filter((entry) => entry?.score > 0 && entry?.policy?.id)
+        .map((entry) => entry.policy.id)
+    )
+  ).slice(0, 3);
+  if (!policyIds.length) return [];
+
+  const { data, error } = await supabase
+    .from("policy_chunks")
+    .select("id, policy_id, chunk_text")
+    .eq("company_id", companyId)
+    .in("policy_id", policyIds)
+    .limit(60);
+  if (error) {
+    console.error("Focused policy chunk lookup failed:", error);
+    return [];
+  }
+
+  return (data || [])
+    .map((row) => ({
+      ...row,
+      similarity: 0.5,
+      focused: true,
+      focus_score: scorePolicyChunkForQuestion(row.chunk_text, question),
+    }))
+    .filter((row) => row.focus_score > 0)
+    .sort((a, b) => b.focus_score - a.focus_score)
+    .slice(0, limit);
+};
+
+const mergeMatchesById = (...groups) => {
+  const merged = new Map();
+  groups.flat().forEach((row) => {
+    if (!row?.id || merged.has(row.id)) return;
+    merged.set(row.id, row);
+  });
+  return Array.from(merged.values());
+};
+
+const splitPolicySentences = (text = "") =>
+  String(text || "")
+    .replace(/\s*•\s*/g, ". ")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim().replace(/^\d+(\.\d+)*\s*/, ""))
+    .filter(Boolean);
+
+const cleanExtractedAnswer = (answer = "") =>
+  String(answer || "")
+    .replace(/\s+/g, " ")
+    .replace(/\.([A-Z])/g, ". $1")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^([A-Z][A-Za-z/& -]{2,40})\s+\1\b/i, "$1")
+    .trim();
+
+const entitlementTargetForQuestion = (question = "") => {
+  const q = normalizeLookup(question);
+  if (/\b(pl|privilege leave|annual leave|earned leave)\b/.test(q)) {
+    return {
+      type: "standard",
+      patterns: [/\bprivilege leave\b/i, /\bpl\b/i],
+    };
+  }
+  if (/\b(sl|sick|casual sick|casual leave|medical)\b/.test(q)) {
+    return {
+      type: "standard",
+      patterns: [/\bsick leave\b/i, /\bcasual\s*\/?\s*sick leave\b/i, /\bsl\b/i],
+    };
+  }
+  if (/\bpaternity\b/.test(q)) {
+    return { type: "standard", patterns: [/\bpaternity leave\b/i] };
+  }
+  if (/\bmaternity\b/.test(q)) {
+    return { type: "standard", patterns: [/\bmaternity leave\b/i] };
+  }
+  if (/\bholiday|holidays\b/.test(q)) {
+    return { type: "holiday", patterns: [/\bpublic holidays?\b/i, /\boptional holidays?\b/i, /\bholiday list\b/i] };
+  }
+  return null;
+};
+
+const answerSimpleEntitlementFromMatches = ({ question, matches = [] }) => {
+  const asksAmount = /\b(how many|count|number of|allowed|entitled|eligible|available|avail|get)\b/i.test(question);
+  if (!asksAmount) return "";
+  const target = entitlementTargetForQuestion(question);
+  if (!target) return "";
+
+  const sentences = matches
+    .slice(0, 10)
+    .flatMap((row) => splitPolicySentences(row.chunk_text))
+    .filter((sentence, index, all) => all.indexOf(sentence) === index);
+
+  if (target.type === "holiday") {
+    const publicHoliday = sentences.find((sentence) =>
+      /\bemployees are entitled\b/i.test(sentence) &&
+      /\b(company-declared|statutory|public holidays?|holiday list)\b/i.test(sentence)
+    );
+    const optionalHoliday = sentences.find((sentence) =>
+      /\b(up to|entitled|avail)\b/i.test(sentence) && /\boptional holidays?\b/i.test(sentence)
+    );
+    if (publicHoliday && optionalHoliday) return cleanExtractedAnswer(`${publicHoliday} ${optionalHoliday}`);
+    if (publicHoliday) return cleanExtractedAnswer(publicHoliday);
+  }
+
+  const answer =
+    sentences.find((sentence) => {
+      const hasTarget = target.patterns.some((pattern) => pattern.test(sentence));
+      const hasEmployeeSubject = /\bemployees?\b/i.test(sentence);
+      const hasEntitlement = /\b(entitled|eligible|up to|working days?|weeks?|paid leave|calendar year|may avail)\b/i.test(sentence);
+      const hasNumber = /\b\d+\b|\(\d+\)|\b(one|two|three|four|five|six|twelve|twenty|twenty-six)\b/i.test(sentence);
+      return hasEmployeeSubject && hasTarget && hasEntitlement && hasNumber;
+    }) || "";
+  return cleanExtractedAnswer(answer);
+};
+
+const answerSimpleSanctionFromMatches = ({ question, matches = [] }) => {
+  if (!/\b(punish|punishment|penalty|penalties|sanction|violation|disciplinary|consequence|action)\b/i.test(question)) {
+    return "";
+  }
+  const sentences = matches
+    .slice(0, 10)
+    .flatMap((row) => splitPolicySentences(row.chunk_text))
+    .filter((sentence, index, all) => all.indexOf(sentence) === index);
+
+  const sanctionIndex = sentences.findIndex((sentence) =>
+    /\b(non-compliance|violation|violations|insider trading)\b/i.test(sentence) &&
+    /\b(disciplinary|wage freeze|suspension|clawback|disgorgement|penalties|prosecution|sebi action)\b/i.test(sentence)
+  );
+  if (sanctionIndex < 0) return "";
+
+  const answerParts = [sentences[sanctionIndex]];
+  const next = sentences[sanctionIndex + 1] || "";
+  if (/\b(insider trading|sebi act|section|penalties|prosecution)\b/i.test(next)) {
+    answerParts.push(next);
+  }
+  return cleanExtractedAnswer(answerParts.join(" "));
+};
+
+const isLikelyTableOfContentsLine = (sentence = "") => {
+  const text = String(sentence || "");
+  const numberedHeadings = (text.match(/\b\d+(\.\d+)?\s+[A-Z][A-Za-z/& -]{2,}/g) || []).length;
+  const digitCount = (text.match(/\d/g) || []).length;
+  return numberedHeadings >= 4 || (digitCount > 14 && text.length < 260);
+};
+
+const isUsefulPolicySentence = (sentence = "") => {
+  const text = cleanExtractedAnswer(sentence);
+  if (text.length < 35 || text.length > 520) return false;
+  if (isLikelyTableOfContentsLine(text)) return false;
+  return /\b(shall|will|must|may|can|cannot|should|required|entitled|eligible|applicable|prohibited|include|includes|including|responsible|approval|report|submit|contact|disciplinary|penalty|penalties|leave|holiday|allowance|reimbursement|training|review|disclosure|compliance)\b/i.test(text);
+};
+
+const sentenceScoreForQuestion = (sentence = "", question = "") => {
+  const rawQuestionTokens = baseLookupTokens(question);
+  const expandedQuestionTokens = lookupTokens(question);
+  const sentenceTokens = lookupTokens(sentence);
+  const sentenceTokenSet = new Set(sentenceTokens);
+  const sentenceLookup = sentenceTokens.join(" ");
+  const rawOverlap = rawQuestionTokens.reduce((sum, token) => {
+    if (sentenceTokenSet.has(token)) return sum + 5;
+    if (sentenceLookup.includes(token)) return sum + 2;
+    return sum;
+  }, 0);
+  const expandedOverlap = expandedQuestionTokens.reduce((sum, token) => {
+    if (rawQuestionTokens.includes(token)) return sum;
+    if (sentenceTokenSet.has(token)) return sum + 1;
+    return sum;
+  }, 0);
+  const actionBoost = /\b(how|what|when|where|who|which|can|do|does|eligible|allowed|punish|penalty|process|apply|contact|report)\b/i.test(question) &&
+    /\b(shall|will|must|may|can|required|entitled|eligible|prohibited|report|submit|contact|approval|disciplinary|penalty|process)\b/i.test(sentence)
+    ? 3
+    : 0;
+  return rawOverlap + expandedOverlap + actionBoost;
+};
+
+const sentenceMatchesQuestionIntent = ({ sentence, question, intent }) => {
+  if (/\b(how|process|steps|apply|request|submit|approve|approval|claim|do i|what should)\b/i.test(question) || intent === "procedure") {
+    return /\b(apply|applied|request|requests|submitted|submit|approval|approved|through|system|required|must|process|inform|report|contact)\b/i.test(sentence);
+  }
+  if (/\b(who|whom|person|officer|contact|member|chairperson|committee)\b/i.test(question)) {
+    return /\b(officer|contact|member|committee|chairperson|manager|hr|compliance|secretary|department|team)\b/i.test(sentence);
+  }
+  if (/\b(what is|meaning|define|definition)\b/i.test(question) || intent === "definition") {
+    return /\b(is|are|means|mean|refers to|defined as|includes|include)\b/i.test(sentence);
+  }
+  return true;
+};
+
+const answerFromPolicySentences = ({ question, matches = [], minScore = 10, intent = "unknown" }) => {
+  const candidates = matches
+    .slice(0, 12)
+    .flatMap((row) =>
+      splitPolicySentences(row.chunk_text).map((sentence, index) => ({
+        sentence: cleanExtractedAnswer(sentence),
+        index,
+        policyId: row.policy_id,
+        score: sentenceScoreForQuestion(sentence, question) + Math.min(Number(row.focus_score || 0), 20) / 5,
+      }))
+    )
+    .filter((item, index, all) =>
+      isUsefulPolicySentence(item.sentence) &&
+      sentenceMatchesQuestionIntent({ sentence: item.sentence, question, intent }) &&
+      all.findIndex((other) => other.sentence === item.sentence) === index
+    )
+    .sort((a, b) => b.score - a.score);
+
+  const best = candidates[0];
+  if (!best || best.score < minScore) return "";
+  return cleanExtractedAnswer(best.sentence);
+};
+
 const getPolicyDocumentStatus = async ({ companyId, policyId }) => {
   if (!policyId) return "unknown";
   const { data, error } = await supabase
@@ -1594,7 +2391,29 @@ const getPolicyDocumentStatus = async ({ companyId, policyId }) => {
   return data?.length ? "uploaded" : "missing";
 };
 
+const getOrgPolicySearchStatus = async (companyId) => {
+  const [{ data: documents, error: documentError }, { data: chunks, error: chunkError }] = await Promise.all([
+    supabase.from("policy_documents").select("id").eq("company_id", companyId).limit(1),
+    supabase.from("policy_chunks").select("id").eq("company_id", companyId).limit(1),
+  ]);
+  if (documentError || chunkError) {
+    console.error("Policy search status lookup failed:", documentError || chunkError);
+    return "unknown";
+  }
+  if (!documents?.length) return "no_uploaded_documents";
+  if (!chunks?.length) return "no_indexed_chunks";
+  return "searchable";
+};
+
 const buildClosestPolicyFallback = async ({ companyId, question, modules }) => {
+  const searchStatus = await getOrgPolicySearchStatus(companyId);
+  if (searchStatus === "no_uploaded_documents") {
+    return "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Genie.";
+  }
+  if (searchStatus === "no_indexed_chunks") {
+    return "Uploaded policy documents are not searchable yet. Re-upload them or check indexing.";
+  }
+
   const closest = findClosestPolicyArea(question, modules);
   if (!closest || closest.score <= 0) {
     return "Not in the uploaded policies. Check with HR.";
@@ -1742,7 +2561,8 @@ app.get("/api/org/policies", requireOrgAccess, async (req, res) => {
       ensureTemplate: true,
       includeHidden: req.query.include_hidden === "1",
     });
-    return res.json({ org: company, modules });
+    const stats = await getPolicyStats({ companyId: req.orgCompanyId, modules });
+    return res.json({ org: company, modules, stats });
   } catch (error) {
     console.error("Fetch org dashboard failed:", error);
     return res.status(500).send(IS_PRODUCTION ? "Failed to load organization policies." : error.message || "Failed to load organization policies.");
@@ -1967,7 +2787,7 @@ app.delete("/api/org/policies/:id", requireOrgManager, async (req, res) => {
 app.get("/api/org/people", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
   const { data, error } = await supabase
     .from("org_people")
-    .select("id, email, name, role, status, invited_at, created_at")
+    .select("id, employee_code, email, name, role, status, invited_at, created_at")
     .eq("company_id", req.orgCompanyId)
     .eq("role", "employee")
     .order("created_at", { ascending: false });
@@ -1983,7 +2803,7 @@ app.get("/api/org/admins", requireSuperAdmin, async (req, res) => {
   if (!companyId) return res.status(400).send("Organization context is required.");
   const { data, error } = await supabase
     .from("org_people")
-    .select("id, email, name, role, status, invited_at, created_at")
+    .select("id, employee_code, email, name, role, status, invited_at, created_at")
     .eq("company_id", companyId)
     .eq("role", "admin")
     .order("created_at", { ascending: false });
@@ -2027,18 +2847,11 @@ app.post("/api/org/admins", requireSuperAdmin, async (req, res) => {
   let { data, error } = await supabase
     .from("org_people")
     .upsert(payload, { onConflict: "company_id,email" })
-    .select("id, email, name, role, status, invited_at, created_at")
+    .select("id, employee_code, email, name, role, status, invited_at, created_at")
     .single();
   if (isMissingColumnError(error)) {
     const { password_hash, ...fallbackPayload } = payload;
-    temporaryPassword = DEFAULT_EMPLOYEE_PASSWORD;
-    const fallback = await supabase
-      .from("org_people")
-      .upsert(fallbackPayload, { onConflict: "company_id,email" })
-      .select("id, email, name, role, status, invited_at, created_at")
-      .single();
-    data = fallback.data;
-    error = fallback.error;
+    return res.status(500).send("Password storage is not configured. Apply server/schema.sql before creating admins.");
   }
   if (error) {
     console.error("Save org admin failed:", error);
@@ -2102,7 +2915,7 @@ app.post("/api/org/admins/:id/send-invite", requireSuperAdmin, async (req, res) 
     .eq("id", admin.id)
     .eq("company_id", companyId);
   if (isMissingColumnError(passwordError)) {
-    temporaryPassword = DEFAULT_EMPLOYEE_PASSWORD;
+    return res.status(500).send("Password storage is not configured. Apply server/schema.sql before sending invites.");
   } else if (passwordError) {
     return res.status(500).send("Failed to generate admin credentials.");
   }
@@ -2140,7 +2953,7 @@ app.patch("/api/org/admins/:id", requireSuperAdmin, async (req, res) => {
     .eq("id", req.params.id)
     .eq("company_id", companyId)
     .eq("role", "admin")
-    .select("id, email, name, role, status, invited_at, created_at")
+    .select("id, employee_code, email, name, role, status, invited_at, created_at")
     .maybeSingle();
   if (error) return res.status(500).send(error.message || "Failed to update admin.");
   if (!data) return res.status(404).send("Admin not found.");
@@ -2170,49 +2983,135 @@ app.post("/api/org/people", requireOrgManager, requireStandaloneEmployeeAccess, 
     .maybeSingle();
   const isHrmsMode = (companyRow?.access_mode || "standalone") === "hrms_link";
 
-  const payload = rows
-    .map((row) => ({
-      company_id: req.orgCompanyId,
-      email: sanitizeEmail(row.email),
-      name: sanitizeText(row.name || ""),
-      role: "employee",
-      status: row.status === "draft" || row.status === "invited" ? row.status : "active",
-      invited_at: row.status === "invited" ? new Date().toISOString() : null,
-    }))
-    .filter((row) => row.email && row.email.includes("@"));
-  if (!payload.length) return res.status(400).send("At least one valid email is required.");
+  const seenCodes = new Set();
+  const seenEmails = new Set();
+  const validationErrors = [];
+  const normalizedRows = rows
+    .map((row, index) => {
+      const employeeCode = sanitizeEmployeeCode(row.employee_code || row.employeeCode || row.code || "");
+      const email = sanitizeEmail(row.email || "");
+      const status = row.status === "draft" || row.status === "invited" ? row.status : "active";
+      if (!employeeCode) validationErrors.push(`Row ${index + 1}: employee_code is required.`);
+      if (!email || !email.includes("@")) validationErrors.push(`Row ${index + 1}: valid email is required.`);
+      if (employeeCode && seenCodes.has(employeeCode)) validationErrors.push(`Row ${index + 1}: duplicate employee_code ${employeeCode}.`);
+      if (email && seenEmails.has(email)) validationErrors.push(`Row ${index + 1}: duplicate email ${email}.`);
+      seenCodes.add(employeeCode);
+      seenEmails.add(email);
+      return {
+        employee_code: employeeCode,
+        email,
+        name: sanitizeText(row.name || ""),
+        role: "employee",
+        status,
+        invited_at: status === "invited" ? new Date().toISOString() : null,
+      };
+    })
+    .filter((row) => row.employee_code && row.email && row.email.includes("@"));
+  if (validationErrors.length) return res.status(400).json({ error: validationErrors.join(" ") });
+  if (!normalizedRows.length) return res.status(400).send("At least one valid employee is required.");
 
-  const { data, error } = await supabase
+  const { data: existingPeople, error: existingError } = await supabase
     .from("org_people")
-    .upsert(payload, { onConflict: "company_id,email" })
-    .select("id, email, name, role, status, invited_at, created_at");
-  if (error) {
-    console.error("Save people failed:", error);
-    return res.status(500).send(error.message || "Failed to save people.");
+    .select("id, employee_code, email")
+    .eq("company_id", req.orgCompanyId)
+    .eq("role", "employee");
+  if (existingError) {
+    console.error("Load existing people failed:", existingError);
+    return res.status(500).send("Failed to load existing people.");
+  }
+
+  const byEmail = new Map((existingPeople || []).map((row) => [row.email, row]));
+  const byCode = new Map((existingPeople || []).map((row) => [sanitizeEmployeeCode(row.employee_code || ""), row]).filter(([code]) => code));
+  const responseRows = [];
+
+  for (const row of normalizedRows) {
+    const emailMatch = byEmail.get(row.email);
+    const codeMatch = byCode.get(row.employee_code);
+    if (emailMatch && codeMatch && emailMatch.id !== codeMatch.id) {
+      responseRows.push({
+        ...row,
+        email_sent: false,
+        email_error: `Employee code ${row.employee_code} and email ${row.email} belong to different existing employees.`,
+      });
+      continue;
+    }
+
+    const existing = emailMatch || codeMatch || null;
+    if (existing) {
+      const { data: updated, error: updateError } = await supabase
+        .from("org_people")
+        .update({
+          employee_code: row.employee_code,
+          email: row.email,
+          name: row.name,
+          status: row.status,
+          invited_at: row.invited_at,
+        })
+        .eq("id", existing.id)
+        .eq("company_id", req.orgCompanyId)
+        .select("id, employee_code, email, name, role, status, invited_at, created_at")
+        .single();
+      if (updateError) {
+        console.error("Update person failed:", updateError);
+        responseRows.push({ ...row, email_sent: false, email_error: updateError.message || "Update failed." });
+        continue;
+      }
+      responseRows.push({ ...updated, email_sent: false, password_unchanged: true });
+      byEmail.set(updated.email, updated);
+      byCode.set(sanitizeEmployeeCode(updated.employee_code || ""), updated);
+      continue;
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const { data: inserted, error: insertError } = await supabase
+      .from("org_people")
+      .insert({
+        company_id: req.orgCompanyId,
+        employee_code: row.employee_code,
+        email: row.email,
+        name: row.name,
+        role: "employee",
+        status: row.status,
+        password_hash: await bcrypt.hash(temporaryPassword, 10),
+        must_reset_password: true,
+        password_expires_at: tempPasswordExpiryIso(),
+        invited_at: row.invited_at,
+      })
+      .select("id, employee_code, email, name, role, status, invited_at, created_at")
+      .single();
+    if (insertError) {
+      console.error("Insert person failed:", insertError);
+      responseRows.push({ ...row, email_sent: false, email_error: insertError.message || "Insert failed." });
+      continue;
+    }
+
+    responseRows.push({ ...inserted, temporary_password: temporaryPassword });
+    byEmail.set(inserted.email, inserted);
+    byCode.set(sanitizeEmployeeCode(inserted.employee_code || ""), inserted);
   }
 
   // In HRMS mode no email goes out — the HRMS owns the entry path.
   if (isHrmsMode) {
-    return res.status(201).json((data || []).map((row) => ({ ...row, email_sent: false })));
+    return res.status(201).json(responseRows.map((row) => ({ ...row, email_sent: false })));
   }
 
-  // Standalone mode: send a 7-day invite link to each newly-added employee.
-  // If SMTP isn't configured the response surfaces dev_link so the admin can
-  // copy-paste it manually.
+  // Standalone mode: email newly-created employees their code + temporary
+  // password. Existing employees keep their current password.
   const orgName = companyRow?.name || "Your organization";
   const orgSlug = companyRow?.slug || "";
-  const responseRows = await Promise.all(
-    (data || []).map(async (row) => {
+  const emailedRows = await Promise.all(
+    responseRows.map(async (row) => {
+      if (!row.temporary_password) return row;
       try {
-        const { linkUrl } = await sendMagicLink({
+        await sendEmployeeCredentials({
           companyId: req.orgCompanyId,
           orgName,
           orgSlug,
           to: row.email,
           name: row.name,
-          kind: "invite",
+          employeeCode: row.employee_code,
+          password: row.temporary_password,
           req,
-          res,
         });
         await supabase
           .from("org_people")
@@ -2222,25 +3121,28 @@ app.post("/api/org/people", requireOrgManager, requireStandaloneEmployeeAccess, 
         return {
           ...row,
           email_sent: true,
-          ...(IS_PRODUCTION ? {} : { dev_link: linkUrl }),
         };
       } catch (emailError) {
         console.error("Employee invite email failed:", emailError);
         return {
           ...row,
           email_sent: false,
-          email_error: emailError.message || "Invite email failed. SMTP may not be configured.",
+          email_error: emailError.message || "Credentials email failed. SMTP may not be configured.",
         };
       }
     })
   );
-  return res.status(201).json(responseRows);
+  return res.status(201).json(emailedRows);
 });
 
 app.patch("/api/org/people/:id", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
   const updates = {};
   if (req.body?.name !== undefined) updates.name = sanitizeText(req.body.name);
   if (req.body?.email !== undefined) updates.email = sanitizeEmail(req.body.email);
+  if (req.body?.employee_code !== undefined || req.body?.employeeCode !== undefined) {
+    updates.employee_code = sanitizeEmployeeCode(req.body.employee_code || req.body.employeeCode || "");
+    if (!updates.employee_code) return res.status(400).send("Employee code is required.");
+  }
   if (req.body?.status !== undefined) {
     const allowed = new Set(["draft", "invited", "active", "disabled"]);
     if (!allowed.has(req.body.status)) return res.status(400).send("Invalid status.");
@@ -2255,7 +3157,7 @@ app.patch("/api/org/people/:id", requireOrgManager, requireStandaloneEmployeeAcc
     .eq("id", req.params.id)
     .eq("company_id", req.orgCompanyId)
     .eq("role", "employee")
-    .select("id, email, name, role, status, invited_at, created_at")
+    .select("id, employee_code, email, name, role, status, invited_at, created_at")
     .maybeSingle();
   if (error) {
     console.error("Update person failed:", error);
@@ -2279,13 +3181,12 @@ app.delete("/api/org/people/:id", requireOrgManager, requireStandaloneEmployeeAc
   return res.json({ ok: true });
 });
 
-// Send a fresh magic link to a person — used by admins when an invite is
-// lost or expired. Standalone-mode only.
+// Reset and send fresh temporary credentials to a person. Standalone-mode only.
 app.post("/api/org/people/:id/resend-invite", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
   const [{ data: existing, error: lookupError }, { data: company }] = await Promise.all([
     supabase
       .from("org_people")
-      .select("id, email, name, role")
+      .select("id, employee_code, email, name, role")
       .eq("id", req.params.id)
       .eq("company_id", req.orgCompanyId)
       .maybeSingle(),
@@ -2298,15 +3199,27 @@ app.post("/api/org/people/:id/resend-invite", requireOrgManager, requireStandalo
   if (!existing) return res.status(404).send("Person not found.");
 
   try {
-    const { linkUrl } = await sendMagicLink({
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const { error: passwordError } = await supabase
+      .from("org_people")
+      .update({ password_hash: passwordHash, must_reset_password: true, password_expires_at: tempPasswordExpiryIso() })
+      .eq("id", existing.id)
+      .eq("company_id", req.orgCompanyId);
+    if (passwordError) throw passwordError;
+    // Nuke live sessions BEFORE the email attempt. The password on disk is
+    // already rotated at this point, so a stale cookie must not survive
+    // even if SMTP fails and we return an error.
+    await nukeSessionsForUsers([existing.id]);
+    await sendEmployeeCredentials({
       companyId: req.orgCompanyId,
       orgName: company?.name || "Your organization",
       orgSlug: company?.slug || "",
       to: existing.email,
       name: existing.name,
-      kind: "invite",
+      employeeCode: existing.employee_code,
+      password: temporaryPassword,
       req,
-      res,
     });
     await supabase
       .from("org_people")
@@ -2317,16 +3230,237 @@ app.post("/api/org/people/:id/resend-invite", requireOrgManager, requireStandalo
       ok: true,
       email: existing.email,
       email_sent: true,
-      ...(IS_PRODUCTION ? {} : { dev_link: linkUrl }),
+      temporary_password: temporaryPassword,
     });
   } catch (err) {
-    console.error("Resend invite failed:", err);
+    console.error("Credential resend failed:", err);
     return res.status(500).json({
       ok: false,
       email_sent: false,
-      email_error: err.message || "Invite email failed.",
+      email_error: err.message || "Credentials email failed.",
     });
   }
+});
+
+// Session-authenticated password change. Used by the first-login flow when
+// `must_reset_password` is true (temp password from an invite is still in
+// use). No OTP required — the current session proves the temp password was
+// just verified. Clears the reset flag so the redirect gate lifts.
+app.post("/api/password/change", async (req, res) => {
+  const user = req.session?.user;
+  if (!user?.id || !user?.companyId) return res.status(401).send("Sign in first.");
+  const nextPassword = String(req.body?.password || "");
+  if (nextPassword.length < 8) return res.status(400).send("Password must be at least 8 characters.");
+  try {
+    const passwordHash = await bcrypt.hash(nextPassword, 10);
+    const { error } = await supabase
+      .from("org_people")
+      .update({ password_hash: passwordHash, must_reset_password: false, password_expires_at: null })
+      .eq("id", user.id)
+      .eq("company_id", user.companyId);
+    if (error) throw error;
+    req.session.user.mustResetPassword = false;
+    // Force a write to the session store before responding — otherwise
+    // the next request can race the async save and read a stale copy
+    // where mustResetPassword is still true, keeping the gate stuck on.
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()));
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Password change failed:", error);
+    return res.status(500).send(error.message || "Could not change password.");
+  }
+});
+
+// Bulk invite for a caller-supplied list of person ids. Same behaviour as
+// invite-all (regenerates temp password → resends email → updates
+// `invited_at`) but scoped to the selection.
+app.post("/api/org/people/invite-many", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  if (!ids.length) return res.status(400).send("Select at least one person to invite.");
+  const [{ data: people, error: peopleError }, { data: company }] = await Promise.all([
+    supabase
+      .from("org_people")
+      .select("id, employee_code, email, name, role")
+      .eq("company_id", req.orgCompanyId)
+      .in("id", ids)
+      .neq("role", "super_admin"),
+    supabase.from("companies").select("id, name, slug").eq("id", req.orgCompanyId).maybeSingle(),
+  ]);
+  if (peopleError) {
+    console.error("Invite-many lookup failed:", peopleError);
+    return res.status(500).send("Failed to load selected people.");
+  }
+  const targets = (people || []).filter((p) => p.email);
+  let sent = 0;
+  let failed = 0;
+  const skipped = ids.length - targets.length;
+  const errors = [];
+  for (const person of targets) {
+    try {
+      const temporaryPassword = generateTemporaryPassword();
+      const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+      const { error: passwordError } = await supabase
+        .from("org_people")
+        .update({ password_hash: passwordHash, must_reset_password: true, password_expires_at: tempPasswordExpiryIso() })
+        .eq("id", person.id)
+        .eq("company_id", req.orgCompanyId);
+      if (passwordError) throw passwordError;
+      // Nuke sessions right after the DB rotation, before the email send.
+      // If SMTP fails downstream we still want the old cookie dead.
+      await nukeSessionsForUsers([person.id]);
+      await sendEmployeeCredentials({
+        companyId: req.orgCompanyId,
+        orgName: company?.name || "Your organization",
+        orgSlug: company?.slug || "",
+        to: person.email,
+        name: person.name,
+        employeeCode: person.employee_code,
+        password: temporaryPassword,
+        req,
+      });
+      await supabase
+        .from("org_people")
+        .update({ invited_at: new Date().toISOString() })
+        .eq("id", person.id)
+        .eq("company_id", req.orgCompanyId);
+      sent += 1;
+    } catch (err) {
+      failed += 1;
+      errors.push({ id: person.id, email: person.email, error: err?.message || String(err) });
+      console.error(`Invite-many failed for ${person.email}:`, err);
+    }
+  }
+  return res.json({ sent, failed, skipped, errors });
+});
+
+// Bulk delete with full cleanup: magic tokens, password-reset OTPs, chat
+// usage, then the org_people row itself. Super admins and the caller
+// themselves are always skipped.
+app.post("/api/org/people/delete-many", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  if (!ids.length) return res.status(400).send("Select at least one person to delete.");
+  const callerId = req.session?.user?.id;
+  const { data: people, error: lookupError } = await supabase
+    .from("org_people")
+    .select("id, email, role")
+    .eq("company_id", req.orgCompanyId)
+    .in("id", ids);
+  if (lookupError) {
+    console.error("Delete-many lookup failed:", lookupError);
+    return res.status(500).send("Failed to load selected people.");
+  }
+  const targets = (people || []).filter((p) => p.role !== "super_admin" && p.id !== callerId);
+  const skipped = ids.length - targets.length;
+  let deleted = 0;
+  let failed = 0;
+  const errors = [];
+  const deletedIds = [];
+  for (const person of targets) {
+    try {
+      // 1. Magic tokens — the invite/recovery links emailed to them.
+      const { error: tokenErr } = await supabase
+        .from("magic_tokens")
+        .delete()
+        .eq("company_id", req.orgCompanyId)
+        .eq("email", person.email);
+      if (tokenErr && tokenErr.code !== "42P01") throw tokenErr;
+
+      // 2. Password reset OTPs.
+      const { error: otpErr } = await supabase
+        .from("password_reset_otps")
+        .delete()
+        .eq("person_id", person.id);
+      if (otpErr && otpErr.code !== "42P01") throw otpErr;
+
+      // 3. Chat usage rows.
+      const { error: chatErr } = await supabase
+        .from("chat_usage")
+        .delete()
+        .eq("user_id", String(person.id));
+      if (chatErr && chatErr.code !== "42P01") throw chatErr;
+
+      // 4. Finally, the person row (kills password_hash + invited_at).
+      const { error: personErr } = await supabase
+        .from("org_people")
+        .delete()
+        .eq("id", person.id)
+        .eq("company_id", req.orgCompanyId);
+      if (personErr) throw personErr;
+
+      deleted += 1;
+      deletedIds.push(person.id);
+    } catch (err) {
+      failed += 1;
+      errors.push({ id: person.id, email: person.email, error: err?.message || String(err) });
+      console.error(`Delete-many failed for ${person.email}:`, err);
+    }
+  }
+  // Kill any live server-side session belonging to a deleted user so the
+  // "cookie already in a browser" case can't stay logged in past deletion.
+  const sessionsRemoved = await nukeSessionsForUsers(deletedIds);
+  return res.json({ deleted, failed, skipped, errors, sessions_invalidated: sessionsRemoved });
+});
+
+// Bulk invite: reissues a temporary password and re-sends the credentials
+// email to every non-super-admin person in this org. Super admins are
+// skipped because they're the site owner, not an invitee.
+app.post("/api/org/people/invite-all", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
+  const [{ data: people, error: peopleError }, { data: company }] = await Promise.all([
+    supabase
+      .from("org_people")
+      .select("id, employee_code, email, name, role")
+      .eq("company_id", req.orgCompanyId)
+      .neq("role", "super_admin"),
+    supabase.from("companies").select("id, name, slug").eq("id", req.orgCompanyId).maybeSingle(),
+  ]);
+  if (peopleError) {
+    console.error("Invite-all lookup failed:", peopleError);
+    return res.status(500).send("Failed to load people.");
+  }
+  const targets = (people || []).filter((p) => p.email);
+  let sent = 0;
+  let failed = 0;
+  const skipped = (people || []).length - targets.length;
+  const errors = [];
+  for (const person of targets) {
+    try {
+      const temporaryPassword = generateTemporaryPassword();
+      const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+      const { error: passwordError } = await supabase
+        .from("org_people")
+        .update({ password_hash: passwordHash, must_reset_password: true, password_expires_at: tempPasswordExpiryIso() })
+        .eq("id", person.id)
+        .eq("company_id", req.orgCompanyId);
+      if (passwordError) throw passwordError;
+      // Session nuke happens BEFORE the email attempt so a downstream
+      // SMTP failure can't leave a stale cookie authenticated against a
+      // password_hash that's already been rotated on disk.
+      await nukeSessionsForUsers([person.id]);
+      await sendEmployeeCredentials({
+        companyId: req.orgCompanyId,
+        orgName: company?.name || "Your organization",
+        orgSlug: company?.slug || "",
+        to: person.email,
+        name: person.name,
+        employeeCode: person.employee_code,
+        password: temporaryPassword,
+        req,
+      });
+      await supabase
+        .from("org_people")
+        .update({ invited_at: new Date().toISOString() })
+        .eq("id", person.id)
+        .eq("company_id", req.orgCompanyId);
+      sent += 1;
+    } catch (err) {
+      failed += 1;
+      errors.push({ id: person.id, email: person.email, error: err?.message || String(err) });
+      console.error(`Invite-all failed for ${person.email}:`, err);
+    }
+  }
+  return res.json({ sent, failed, skipped, errors });
 });
 
 // Org-level settings (currently just access_mode). Falls back to 'standalone'
@@ -2336,14 +3470,17 @@ const VALID_ACCESS_MODES = new Set(["standalone", "hrms_link"]);
 app.get("/api/org/settings", requireOrgManager, async (req, res) => {
   const { data, error } = await supabase
     .from("companies")
-    .select("access_mode")
+    .select("access_mode, slug")
     .eq("id", req.orgCompanyId)
     .maybeSingle();
   if (error && !isMissingColumnError(error)) {
     console.error("Load settings failed:", error);
     return res.status(500).send("Failed to load settings.");
   }
-  return res.json({ access_mode: data?.access_mode || "standalone" });
+  return res.json({
+    access_mode: data?.access_mode || "standalone",
+    login_url: data?.slug ? buildOrgLoginUrl(req, data.slug, "index.html#login") : null,
+  });
 });
 
 app.patch("/api/org/settings", requireOrgManager, async (req, res) => {
@@ -2571,13 +3708,29 @@ app.post("/api/hrms/test", loginLimiter, async (req, res) => {
 });
 
 app.get("/api/hrms/launch", async (req, res) => {
-  const org = slugify(req.query.org || req.company?.slug || "");
-  const email = sanitizeEmail(req.query.email || "");
-  const name = sanitizeText(req.query.name || "");
-  const role = req.query.role === "admin" ? "admin" : "employee";
-  const externalId = sanitizeText(req.query.external_id || "");
-  const exp = Number(req.query.exp || 0);
-  const sig = String(req.query.sig || "").trim();
+  // Every field must be a single scalar. If any arrives as an array (a
+  // repeated query key from a param-pollution attempt) we abort — we
+  // cannot know which value the HMAC signer intended.
+  const orgRaw = singleQueryParam(req.query.org);
+  const emailRaw = singleQueryParam(req.query.email);
+  const nameRaw = singleQueryParam(req.query.name);
+  const roleRaw = singleQueryParam(req.query.role);
+  const externalIdRaw = singleQueryParam(req.query.external_id);
+  const expRaw = singleQueryParam(req.query.exp);
+  const sigRaw = singleQueryParam(req.query.sig);
+  if ([orgRaw, emailRaw, nameRaw, roleRaw, externalIdRaw, expRaw, sigRaw].some((v) => v === null)) {
+    return res.status(400).send("Duplicate HRMS launch parameters.");
+  }
+
+  const org = slugify(orgRaw || req.company?.slug || "");
+  const email = sanitizeEmail(emailRaw);
+  const name = sanitizeText(nameRaw);
+  // Hard allowlist. HRMS never gets to assert super_admin — that would
+  // let a compromised HRMS mint a god account on our platform.
+  const role = roleRaw === "admin" ? "admin" : "employee";
+  const externalId = sanitizeText(externalIdRaw);
+  const exp = Number(expRaw || 0);
+  const sig = sigRaw.trim();
   const now = Math.floor(Date.now() / 1000);
 
   if (!org || !email || !exp || !sig) {
@@ -2619,7 +3772,7 @@ app.get("/api/hrms/launch", async (req, res) => {
     return res.status(401).send("Invalid HRMS launch signature.");
   }
 
-  req.session.user = {
+  await establishAuthenticatedSession(req, {
     id: `hrms:${company.id}:${externalId || email}`,
     email,
     name: name || email,
@@ -2628,10 +3781,151 @@ app.get("/api/hrms/launch", async (req, res) => {
     authSource: "hrms",
     externalId: externalId || null,
     selectedCompany: company,
-  };
+  });
   req.session.user.selectedCompany = company;
 
   return res.redirect(303, "/policies.html");
+});
+
+const ensureOrgEmailTemplates = async (companyId) => {
+  const { data: existing, error: loadError } = await supabase
+    .from("org_email_templates")
+    .select("id, company_id, name, subject, body, is_default, created_at, updated_at")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true });
+  if (loadError) throw loadError;
+  if (existing?.length) return existing;
+
+  const { data: legacyDraft } = await supabase
+    .from("org_email_drafts")
+    .select("subject, body")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  const { data: created, error: createError } = await supabase
+    .from("org_email_templates")
+    .insert({
+      company_id: companyId,
+      name: "Employee invitation",
+      subject: legacyDraft?.subject?.trim() || DEFAULT_INVITE_SUBJECT,
+      body: legacyDraft?.body?.trim() || DEFAULT_INVITE_BODY,
+      is_default: true,
+    })
+    .select("id, company_id, name, subject, body, is_default, created_at, updated_at")
+    .single();
+  if (createError) throw createError;
+  return [created];
+};
+
+app.get("/api/org/email-templates", requireOrgManager, async (req, res) => {
+  try {
+    return res.json(await ensureOrgEmailTemplates(req.orgCompanyId));
+  } catch (error) {
+    console.error("Load communication templates failed:", error);
+    return res.status(500).send("Failed to load communication templates.");
+  }
+});
+
+app.post("/api/org/email-templates", requireOrgManager, async (req, res) => {
+  const name = sanitizeText(req.body?.name || "").slice(0, 80);
+  if (!name) return res.status(400).send("Template name is required.");
+  const subject = sanitizeText(req.body?.subject || DEFAULT_INVITE_SUBJECT).slice(0, 200);
+  const body = String(req.body?.body || DEFAULT_INVITE_BODY).trim().slice(0, 20_000);
+  try {
+    const existing = await ensureOrgEmailTemplates(req.orgCompanyId);
+    const { data, error } = await supabase
+      .from("org_email_templates")
+      .insert({
+        company_id: req.orgCompanyId,
+        name,
+        subject,
+        body,
+        is_default: existing.length === 0,
+      })
+      .select("id, company_id, name, subject, body, is_default, created_at, updated_at")
+      .single();
+    if (error) throw error;
+    return res.status(201).json(data);
+  } catch (error) {
+    console.error("Create communication template failed:", error);
+    return res.status(500).send("Failed to create communication template.");
+  }
+});
+
+app.put("/api/org/email-templates/:id", requireOrgManager, async (req, res) => {
+  const name = sanitizeText(req.body?.name || "").slice(0, 80);
+  const subject = sanitizeText(req.body?.subject || "").slice(0, 200);
+  const body = String(req.body?.body || "").trim().slice(0, 20_000);
+  if (!name || !subject || !body) {
+    return res.status(400).send("Template name, subject, and body are required.");
+  }
+  const { data, error } = await supabase
+    .from("org_email_templates")
+    .update({ name, subject, body, updated_at: new Date().toISOString() })
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId)
+    .select("id, company_id, name, subject, body, is_default, created_at, updated_at")
+    .maybeSingle();
+  if (error) {
+    console.error("Save communication template failed:", error);
+    return res.status(500).send("Failed to save communication template.");
+  }
+  if (!data) return res.status(404).send("Template not found.");
+  return res.json(data);
+});
+
+app.post("/api/org/email-templates/:id/default", requireOrgManager, async (req, res) => {
+  const { data: target } = await supabase
+    .from("org_email_templates")
+    .select("id")
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId)
+    .maybeSingle();
+  if (!target) return res.status(404).send("Template not found.");
+
+  const { error: clearError } = await supabase
+    .from("org_email_templates")
+    .update({ is_default: false })
+    .eq("company_id", req.orgCompanyId)
+    .eq("is_default", true);
+  if (clearError) return res.status(500).send("Failed to update active template.");
+  const { data, error } = await supabase
+    .from("org_email_templates")
+    .update({ is_default: true, updated_at: new Date().toISOString() })
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId)
+    .select("id, company_id, name, subject, body, is_default, created_at, updated_at")
+    .single();
+  if (error) {
+    console.error("Set active communication template failed:", error);
+    return res.status(500).send("Failed to update active template.");
+  }
+  return res.json(data);
+});
+
+app.delete("/api/org/email-templates/:id", requireOrgManager, async (req, res) => {
+  const templates = await ensureOrgEmailTemplates(req.orgCompanyId);
+  if (templates.length <= 1) return res.status(400).send("Keep at least one communication template.");
+  const target = templates.find((template) => template.id === req.params.id);
+  if (!target) return res.status(404).send("Template not found.");
+
+  const { error } = await supabase
+    .from("org_email_templates")
+    .delete()
+    .eq("id", req.params.id)
+    .eq("company_id", req.orgCompanyId);
+  if (error) {
+    console.error("Delete communication template failed:", error);
+    return res.status(500).send("Failed to delete communication template.");
+  }
+  if (target.is_default) {
+    const replacement = templates.find((template) => template.id !== target.id);
+    await supabase
+      .from("org_email_templates")
+      .update({ is_default: true, updated_at: new Date().toISOString() })
+      .eq("id", replacement.id)
+      .eq("company_id", req.orgCompanyId);
+  }
+  return res.json({ ok: true });
 });
 
 app.get("/api/org/email-settings", requireOrgManager, async (req, res) => {
@@ -2652,31 +3946,35 @@ app.get("/api/org/email-settings", requireOrgManager, async (req, res) => {
 
 app.put("/api/org/email-settings", requireOrgManager, async (req, res) => {
   const smtp = req.body?.smtp || {};
-  const draft = req.body?.draft || {};
+  const draft = req.body?.draft;
   const now = new Date().toISOString();
   const smtpPayload = {
     company_id: req.orgCompanyId,
     host: sanitizeText(smtp.host || ""),
     port: Number(smtp.port || 0) || null,
     username: sanitizeText(smtp.username || ""),
-    password: smtp.password === undefined ? undefined : String(smtp.password || ""),
+    password: smtp.password === undefined ? undefined : encryptSecret(String(smtp.password || "")),
     from_email: sanitizeEmail(smtp.from_email || ""),
     from_name: sanitizeText(smtp.from_name || ""),
     updated_at: now,
   };
   if (smtp.password === undefined) delete smtpPayload.password;
 
-  const draftPayload = {
-    company_id: req.orgCompanyId,
-    subject: sanitizeText(draft.subject || "You have been invited to the policy portal"),
-    body: String(draft.body || "Hello {{name}}, you have been added to the {{organization}} policy portal.").trim(),
-    updated_at: now,
-  };
-
-  const [{ error: smtpError }, { error: draftError }] = await Promise.all([
+  const draftPayload = draft
+    ? {
+        company_id: req.orgCompanyId,
+        subject: sanitizeText(draft.subject || "You have been invited to the policy portal"),
+        body: String(draft.body || "Hello {{name}}, you have been added to the {{organization}} policy portal.").trim(),
+        updated_at: now,
+      }
+    : null;
+  const [{ error: smtpError }, draftResult] = await Promise.all([
     supabase.from("org_smtp_settings").upsert(smtpPayload, { onConflict: "company_id" }),
-    supabase.from("org_email_drafts").upsert(draftPayload, { onConflict: "company_id" }),
+    draftPayload
+      ? supabase.from("org_email_drafts").upsert(draftPayload, { onConflict: "company_id" })
+      : Promise.resolve({ error: null }),
   ]);
+  const draftError = draftResult.error;
   if (smtpError || draftError) {
     console.error("Save email settings failed:", smtpError || draftError);
     return res.status(500).send("Failed to save email settings.");
@@ -2712,7 +4010,16 @@ app.get("/api/session", (req, res) => {
   if (!req.session?.user) {
     return res.status(401).send("Not authenticated.");
   }
-  return res.json(req.session.user);
+  // Advertise the product root host so the client can build subdomain URLs
+  // (login link, org tile links) without parsing window.location — which
+  // gets things like `policies.zarohr.com` wrong by chopping only the
+  // first label.
+  return res.json({
+    ...req.session.user,
+    rootHost: ROOT_HOST,
+    rootPort: IS_PRODUCTION ? null : PORT,
+    csrfToken: ensureCsrfToken(req),
+  });
 });
 
 // Public, no-auth lightweight context used by the login page to decide which
@@ -2725,7 +4032,7 @@ app.get("/api/auth/context", (req, res) => {
   return res.json({
     // hrms_only = the page should not offer email-login at all; the only
     // valid entry is a signed HRMS launch.
-    mode: !req.company ? "password" : isHrmsOrg ? "hrms_only" : "magic",
+    mode: !req.company ? "password" : isHrmsOrg ? "hrms_only" : "standalone",
     org: req.company ? { name: req.company.name, slug: req.company.slug } : null,
   });
 });
@@ -2863,6 +4170,22 @@ app.post("/api/org/reindex-policies", requireOrgManager, async (req, res) => {
   });
 });
 
+app.get("/api/org/search-status", requireOrgManager, async (req, res) => {
+  const [{ count: documents }, { count: chunks }, { data: latestDocument }, { data: latestChunk }] = await Promise.all([
+    supabase.from("policy_documents").select("id", { count: "exact", head: true }).eq("company_id", req.orgCompanyId),
+    supabase.from("policy_chunks").select("id", { count: "exact", head: true }).eq("company_id", req.orgCompanyId),
+    supabase.from("policy_documents").select("created_at").eq("company_id", req.orgCompanyId).order("created_at", { ascending: false }).limit(1),
+    supabase.from("policy_chunks").select("created_at").eq("company_id", req.orgCompanyId).order("created_at", { ascending: false }).limit(1),
+  ]);
+  return res.json({
+    documents: documents || 0,
+    chunks: chunks || 0,
+    searchable: Boolean((documents || 0) > 0 && (chunks || 0) > 0),
+    latest_document_at: latestDocument?.[0]?.created_at || null,
+    latest_chunk_at: latestChunk?.[0]?.created_at || null,
+  });
+});
+
 app.get("/api/policy-documents", requireOrgAccess, async (req, res) => {
   const policyId = req.query.policyId;
   if (!policyId) {
@@ -2949,10 +4272,24 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
   if (!question) {
     return res.status(400).send("Question is required.");
   }
+  const normalizedQuestion = normalizeLookup(question);
   // Optional short conversation history from the client. Each entry is
   // { role: "user" | "assistant", text }. We use the last 4 turns only —
   // enough to resolve follow-ups like "what about new hires?" without
   // bloating the retrieval query or the final prompt.
+  // Drop our own "not in policies" / rate-limit fallbacks from the client's
+  // replayed history — otherwise Gemini sees a chain of them and repeats
+  // the same reply for the new question even when we now have chunks.
+  const isBotFallbackText = (t = "") => {
+    const s = String(t || "").toLowerCase().trim();
+    return (
+      s.startsWith("not in the uploaded policies") ||
+      s.startsWith("i could not find") ||
+      s.startsWith("i don't have enough information") ||
+      s.startsWith("the chat service is busy") ||
+      s.startsWith("the chat service took too long")
+    );
+  };
   const rawHistory = Array.isArray(req.body?.history) ? req.body.history : [];
   const history = rawHistory
     .slice(-4)
@@ -2960,8 +4297,9 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       role: m?.role === "assistant" ? "assistant" : "user",
       text: sanitizeText(m?.text || "").slice(0, 600),
     }))
-    .filter((m) => m.text);
-  const recentUserTurns = history.filter((m) => m.role === "user").map((m) => m.text);
+    .filter((m) => m.text)
+    .filter((m) => !(m.role === "assistant" && isBotFallbackText(m.text)));
+  const previousTurns = history.slice(0, -1);
 
   // Daily quota gate. Super-admin is exempt (one user, used for testing).
   const userId = req.session?.user?.id;
@@ -3030,16 +4368,94 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       });
     }
 
-    // Folding the last user turn into the retrieval query lets follow-ups
-    // ("what about new hires?") resolve against the prior topic. Capped at
-    // 200 chars so it can't overwhelm the current question's embedding.
-    const priorTurn = recentUserTurns[recentUserTurns.length - 2] || "";
+    const policySearchStatus = await getOrgPolicySearchStatus(req.orgCompanyId);
+    if (policySearchStatus === "no_uploaded_documents") {
+      return res.json({
+        answer: "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Genie.",
+        sources: [],
+        mode: "no_uploaded_documents",
+      });
+    }
+    if (policySearchStatus === "no_indexed_chunks") {
+      return res.json({
+        answer: "Uploaded policy documents are not searchable yet. Re-upload them or check indexing.",
+        sources: [],
+        mode: "no_indexed_chunks",
+      });
+    }
+
+    // Folding recent conversation into retrieval lets follow-ups
+    // ("all the members?") resolve against the prior topic. Capped so it
+    // can't overwhelm the current question's embedding.
+    const priorTurn = previousTurns
+      .slice(-3)
+      .map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.text}`)
+      .join("\n");
     const questionForRetrieval = priorTurn
-      ? `${question}\nPrior question: ${priorTurn.slice(0, 200)}`
+      ? `${question}\nConversation context:\n${priorTurn.slice(0, 600)}`
       : question;
+    const indexVersion = await getPolicyIndexVersion(req.orgCompanyId);
+    const questionHash = hashValue(normalizeLookup(questionForRetrieval));
+    const cached = await getCachedAnswer({
+      companyId: req.orgCompanyId,
+      questionHash,
+      indexVersion,
+    });
+    if (cached) {
+      return res.json({
+        answer: cached.answer,
+        sources: cached.sources || [],
+        cached: true,
+      });
+    }
+    if (role !== "super_admin") {
+      const orgAlready = await peekOrgChatUsage(req.orgCompanyId);
+      if (orgAlready >= CHAT_DAILY_CAP_PER_ORG) {
+        return res.status(429).json({
+          error: "org_daily_limit_reached",
+          message: "This organization's Ask Genie limit has been reached for today. Please try again tomorrow.",
+          remaining: 0,
+        });
+      }
+    }
 
     const closestPolicyArea = findClosestPolicyArea(questionForRetrieval, modules);
     const closestPolicyAreas = findClosestPolicyAreas(questionForRetrieval, modules);
+    let focusedPolicyChunks = await fetchFocusedPolicyChunks({
+      companyId: req.orgCompanyId,
+      policyAreas: closestPolicyAreas.length ? closestPolicyAreas : closestPolicyArea ? [closestPolicyArea] : [],
+      question: questionForRetrieval,
+      limit: 8,
+    });
+    if (!focusedPolicyChunks.length && closestPolicyArea?.rawScore > 0) {
+      const closestDocumentStatus = await getPolicyDocumentStatus({
+        companyId: req.orgCompanyId,
+        policyId: closestPolicyArea.policy.id,
+      });
+      if (closestDocumentStatus === "missing") {
+        return res.json({
+          answer: `"${closestPolicyArea.policy.name}" is configured in ${closestPolicyArea.module.name}, but its document is not uploaded yet. Ask HR to upload it before Genie can answer this.`,
+          sources: [],
+          mode: "policy_document_missing",
+        });
+      }
+    }
+    const earlyEntitlementAnswer = answerSimpleEntitlementFromMatches({ question, matches: focusedPolicyChunks });
+    if (earlyEntitlementAnswer) {
+      return res.json({
+        answer: earlyEntitlementAnswer,
+        sources: focusedPolicyChunks,
+        mode: "policy_entitlement_extract",
+      });
+    }
+    const earlySanctionAnswer = answerSimpleSanctionFromMatches({ question, matches: focusedPolicyChunks });
+    if (earlySanctionAnswer) {
+      return res.json({
+        answer: earlySanctionAnswer,
+        sources: focusedPolicyChunks,
+        mode: "policy_sanction_extract",
+      });
+    }
     const expandedQuestionParts = [
       questionForRetrieval,
       `Question intent: ${questionIntent}.`,
@@ -3069,15 +4485,12 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     }
 
     let matches = initialMatches || [];
-    let filtered = matches.filter((row) => (row.similarity || 0) >= 0.15);
+    let filtered = matches.filter((row) => (row.similarity || 0) >= 0.15 || (row.hybrid_score || 0) > 0);
 
-    // Adaptive query rewrite. When the first retrieval looks weak — either
-    // the top match is mediocre or fewer than two chunks survived the floor
-    // — ask Gemini to rephrase the question in policy vocabulary and search
-    // again. Costs one extra Gemini call, but only on vague questions; the
-    // clear ones skip it entirely.
+    // Optional adaptive query rewrite. It can rescue vague questions, but it
+    // costs an extra Gemini call, so the default production path stays fast.
     const initialTopSim = filtered[0]?.similarity || 0;
-    if (initialTopSim < 0.22 || filtered.length < 2) {
+    if (CHAT_ENABLE_QUERY_REWRITE && (initialTopSim < 0.22 || filtered.length < 2)) {
       const rewrittenQuery = await rewriteQueryForRetrieval(question, modules);
       if (rewrittenQuery && rewrittenQuery.toLowerCase() !== question.trim().toLowerCase()) {
         const rewriteEmbedding = await embedText(rewrittenQuery);
@@ -3091,7 +4504,9 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
           if (rewriteError) {
             console.error("Rewrite hybrid chunk match failed:", rewriteError);
           } else {
-            const rewriteFiltered = (rewriteMatches || []).filter((row) => (row.similarity || 0) >= 0.15);
+              const rewriteFiltered = (rewriteMatches || []).filter(
+                (row) => (row.similarity || 0) >= 0.15 || (row.hybrid_score || 0) > 0
+              );
             if ((rewriteFiltered[0]?.similarity || 0) > initialTopSim) {
               matches = rewriteMatches || [];
               filtered = rewriteFiltered;
@@ -3101,11 +4516,47 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       }
     }
 
+    const policyNameById = new Map(
+      modules.flatMap((module) => (module.policies || []).map((policy) => [policy.id, policy.name]))
+    );
+    filtered = mergeMatchesById(focusedPolicyChunks, filtered).slice(0, 12);
+    matches = filtered;
+    const directEntitlementAnswer = answerSimpleEntitlementFromMatches({ question, matches: filtered });
+    if (directEntitlementAnswer) {
+      return res.json({
+        answer: directEntitlementAnswer,
+        sources: filtered,
+        mode: "policy_entitlement_extract",
+      });
+    }
+    const directSanctionAnswer = answerSimpleSanctionFromMatches({ question, matches: filtered });
+    if (directSanctionAnswer) {
+      return res.json({
+        answer: directSanctionAnswer,
+        sources: filtered,
+        mode: "policy_sanction_extract",
+      });
+    }
+    const directPolicySentenceAnswer = answerFromPolicySentences({
+      question,
+      matches: filtered,
+      minScore: ["procedure", "definition"].includes(questionIntent) ? 12 : 16,
+      intent: questionIntent,
+    });
+    if (directPolicySentenceAnswer) {
+      return res.json({
+        answer: directPolicySentenceAnswer,
+        sources: filtered,
+        mode: "policy_sentence_extract",
+      });
+    }
     const context = filtered
-      .slice(0, 5)
-      .map((row, index) => `Source ${index + 1}:\n${row.chunk_text.slice(0, 800)}`)
+      .slice(0, 6)
+      .map((row, index) => {
+        const policyName = policyNameById.get(row.policy_id) || "Unknown policy";
+        return `Policy excerpt ${index + 1}\nPolicy: ${policyName}\nContent:\n${row.chunk_text.slice(0, 650)}`;
+      })
       .join("\n\n");
-    const siteMap = modules.map(formatModulePolicies).join("\n");
     const matchedPolicyAreas = summarizeMatchedPolicyAreas(filtered, modules);
 
     if (!context) {
@@ -3124,11 +4575,15 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       "STYLE — STRICT:\n" +
       "- Maximum 2 short sentences. Bullets only if the user asks for a list.\n" +
       "- Answer the question directly. No preamble.\n" +
+      "- Never mention policy excerpt numbers or source numbers.\n" +
       "- Never reveal the retrieval mechanism. Forbidden phrases (do not use any of these): \"the provided\", \"the excerpts\", \"the text\", \"the document\", \"the policy text\", \"based on\", \"I checked\", \"focuses on\", \"does not describe\", \"does not contain\", \"does not mention\", \"the information provided\".\n" +
       "- If the answer isn't in the uploaded policies, reply exactly: \"Not in the uploaded policies. Check with HR.\"\n\n" +
       "GROUNDING:\n" +
       "- Use only the provided policy content.\n" +
+      "- Use recent conversation only to resolve what the user is referring to; do not use it as policy evidence.\n" +
       "- Do not invent limits, dates, amounts, approvals.\n" +
+      "- For count, entitlement, eligibility, deadline, and amount questions, answer only when the exact rule is explicitly present in the policy content; otherwise use the exact not-in-policy reply.\n" +
+      "- Do not infer one leave type or benefit from another leave type or benefit.\n" +
       "- If a rule depends on role/location/tenure that the user didn't give, state the rule and the condition in one sentence.";
     const closestPolicyPath = closestPolicyArea?.score > 0
       ? `${closestPolicyArea.module.name} > ${closestPolicyArea.policy.name}`
@@ -3136,14 +4591,32 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     const conversationBlock = history.length
       ? history.map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.text}`).join("\n")
       : "";
-    const prompt = `System:\n${systemPrompt}\n\nQuestion intent:\n${questionIntent}\n\nContext hint:\n${contextHintForIntent(questionIntent)}\n\nClosest policy area:\n${closestPolicyPath}\n\nTop matched policy areas from retrieval:\n${matchedPolicyAreas || "No matched policy areas."}\n\nSite map:\n${siteMap || "No modules listed."}\n\nPolicy excerpts:\n${context || "None"}\n\nRecent conversation:\n${conversationBlock || "(none)"}\n\nQuestion:\n${question}\n\nAnswer:`;
+    const prompt = `System:\n${systemPrompt}\n\nQuestion intent:\n${questionIntent}\nClosest policy area:\n${closestPolicyPath}\nMatched policy areas:\n${matchedPolicyAreas || "No matched policy areas."}\n\nPolicy content:\n${context || "None"}\n\nRecent conversation:\n${conversationBlock || "(none)"}\n\nQuestion:\n${question}\n\nAnswer:`;
     let answer = "";
     let geminiSucceeded = false;
+    let fallbackPolicySentenceAnswer = "";
     try {
       answer = await chatWithGemini(prompt);
+      if (isIncompleteAiAnswer(answer)) {
+        answer = "Not in the uploaded policies. Check with HR.";
+      }
       geminiSucceeded = true;
     } catch (error) {
       console.error("Gemini chat generation failed:", error);
+      fallbackPolicySentenceAnswer = answerFromPolicySentences({
+        question,
+        matches: filtered,
+        minScore: 10,
+        intent: questionIntent,
+      });
+      if (fallbackPolicySentenceAnswer) {
+        return res.json({
+          answer: fallbackPolicySentenceAnswer,
+          sources: filtered,
+          mode: "policy_sentence_extract",
+          ai_error: error?.status === 504 ? "ai_timeout" : "ai_unavailable",
+        });
+      }
       // Surface a clear "we're rate-limited" message rather than the generic
       // "not in policies" — they're different problems for the user.
       if (error?.status === 429) {
@@ -3153,25 +4626,76 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
           error: "rate_limited",
         });
       }
+      if (error?.status === 504) {
+        return res.status(503).json({
+          answer: "The chat service took too long to respond. Please try again.",
+          sources: [],
+          error: "ai_timeout",
+        });
+      }
       answer = "Not in the uploaded policies. Check with HR.";
+    }
+    if (isBotFallbackText(answer) || answerLooksMissing(answer)) {
+      fallbackPolicySentenceAnswer = answerFromPolicySentences({
+        question,
+        matches: filtered,
+        minScore: 10,
+        intent: questionIntent,
+      });
+      if (fallbackPolicySentenceAnswer) {
+        return res.json({
+          answer: fallbackPolicySentenceAnswer,
+          sources: filtered,
+          mode: "policy_sentence_extract",
+        });
+      }
     }
     answer = appendClosestPolicyContext({ answer, closestPolicyAreas });
 
     // Increment the per-user daily counter ONLY when Gemini actually billed us.
     // Site-map / policy-count answers and Gemini-error fallbacks don't count.
     let remaining = null;
+    let orgRemaining = null;
     if (geminiSucceeded && role !== "super_admin") {
-      const usage = await recordChatUsage(userId);
+      const [usage, orgUsage] = await Promise.all([
+        recordChatUsage(userId),
+        recordOrgChatUsage(req.orgCompanyId),
+      ]);
       remaining = usage.remaining;
+      orgRemaining = orgUsage.remaining;
+    }
+    if (geminiSucceeded && answer && !isBotFallbackText(answer)) {
+      await setCachedAnswer({
+        companyId: req.orgCompanyId,
+        questionHash,
+        indexVersion,
+        answer,
+        sources: matches || [],
+      });
     }
 
     return res.json({
       answer: answer || "I could not find this in the uploaded policies. Please check with HR for confirmation.",
       sources: matches || [],
       ...(remaining !== null ? { remaining } : {}),
+      ...(orgRemaining !== null ? { org_remaining: orgRemaining } : {}),
     });
   } catch (error) {
     console.error("Chat failed:", error);
+    if (error?.status === 429) {
+      return res.status(503).json({
+        answer: "The chat service is busy right now. Please try again in a minute.",
+        sources: [],
+        error: "rate_limited",
+      });
+    }
+    if (error?.status === 504) {
+      return res.status(503).json({
+        answer: "The chat service took too long to respond. Please try again.",
+        sources: [],
+        error: "ai_timeout",
+      });
+    }
     return res.status(500).json({
       answer: "I could not search the policies right now. Please try again.",
       sources: [],

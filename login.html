@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in | ZaroHR</title>
+    <script src="app/scripts/theme-boot.js"></script>
+    <link rel="stylesheet" href="app/styles/base.css" />
+    <link rel="stylesheet" href="app/styles/header.css" />
+    <link rel="stylesheet" href="app/styles/buttons.css" />
+    <link rel="stylesheet" href="app/styles/hero.css" />
+    <link rel="stylesheet" href="app/styles/themes.css" />
+    <link rel="stylesheet" href="app/styles/animations.css" />
+    <style>
+      /* Subdomain sign-in: no marketing, just the login card centered. */
+      body[data-page="login-only"] main {
+        min-height: calc(100vh - 100px);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      body[data-page="login-only"] .login {
+        width: 100%;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body[data-page="login-only"] .login-card {
+        width: 100%;
+        max-width: 480px;
+        padding: 36px 38px 30px;
+      }
+      @media (max-width: 640px) {
+        body[data-page="login-only"] main {
+          padding: 16px;
+        }
+        body[data-page="login-only"] .login-card {
+          padding: 28px 24px 24px;
+        }
+      }
+    </style>
+  </head>
+  <body data-page="login-only">
+    <div class="page-ambient" aria-hidden="true">
+      <span class="flow flow-1"></span>
+      <span class="flow flow-2"></span>
+    </div>
+    <div data-include="app/components/header.html"></div>
+    <main>
+      <div data-include="app/components/login.html"></div>
+    </main>
+    <script type="module" src="app/scripts/main.js"></script>
+  </body>
+</html>

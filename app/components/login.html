@@ -1,5 +1,5 @@
 <!-- data-login-mode is set by auth.js after asking the server which flow
-     applies (root → password, subdomain → magic). Starts as `loading` so
+     applies (root password, standalone org password, or HRMS-only). Starts as `loading` so
      the wrong form doesn't briefly paint before detection finishes. -->
 <section class="login" id="login" data-login-mode="loading">
   <div class="login-card">
@@ -10,18 +10,21 @@
       <span data-banner-message></span>
     </div>
 
-    <div class="login-head">
-      <h2 data-login-title>Sign in</h2>
-      <p class="login-sub" data-login-sub>Use your work email and password.</p>
+    <!-- Animated welcome — cycles through short greetings. auth.js may still
+         populate data-login-sub for mode-specific copy; kept optional. -->
+    <div class="login-head login-head-welcome">
+      <h2 class="login-welcome" aria-label="Welcome">
+        <span class="login-welcome-word" data-welcome>Welcome</span>
+      </h2>
+      <p class="login-sub" data-login-sub hidden></p>
     </div>
 
     <form class="login-form" id="login-form" novalidate>
       <label class="login-field">
-        <span>Email</span>
+        <span data-identifier-label>Employee code or email</span>
         <input
-          type="email"
+          type="text"
           name="email"
-          placeholder="you@company.com"
           required
           autocomplete="email"
           autocapitalize="off"
@@ -30,14 +33,28 @@
         />
       </label>
 
-      <!-- Password field — visible only in password mode (root domain). -->
+      <!-- Organization field — visible on root domain only. auth.js toggles
+           it based on hostname. Submitting from root redirects to the
+           org's subdomain login. -->
+      <label class="login-field" data-org-field hidden>
+        <span>Organization</span>
+        <input
+          type="text"
+          name="organization"
+          autocomplete="organization"
+          autocapitalize="off"
+          spellcheck="false"
+          data-org
+        />
+      </label>
+
+      <!-- Password field — visible only in password mode (org subdomain). -->
       <label class="login-field" data-password-field>
         <span>Password</span>
         <span class="login-password-wrap">
           <input
             type="password"
             name="password"
-            placeholder="Enter password"
             autocomplete="current-password"
             data-password
           />
@@ -65,7 +82,51 @@
         <span class="login-submit-label" data-submit-label>Sign in</span>
       </button>
 
+      <button class="login-forgot" type="button" data-forgot-start hidden>Forgot password?</button>
+
       <p class="login-error" id="login-error" role="alert"></p>
+    </form>
+
+    <form class="login-form" data-reset-form hidden novalidate>
+      <label class="login-field">
+        <span>Employee code or email</span>
+        <input
+          type="text"
+          name="identifier"
+          placeholder="EMP001 or you@company.com"
+          required
+          autocomplete="username"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+      </label>
+      <button class="btn primary login-submit" type="button" data-reset-send>
+        <span data-reset-send-label>Send OTP</span>
+      </button>
+      <div class="login-reset-step" data-reset-otp-step>
+        <label class="login-field">
+          <span>OTP</span>
+          <input type="text" name="otp" placeholder="6-digit OTP" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
+        </label>
+        <button class="btn primary login-submit" type="button" data-reset-verify>
+          <span data-reset-verify-label>Verify OTP</span>
+        </button>
+      </div>
+      <div class="login-reset-step" data-reset-password-step hidden>
+        <label class="login-field">
+          <span>New password</span>
+          <input type="password" name="password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" />
+        </label>
+        <label class="login-field">
+          <span>Confirm new password</span>
+          <input type="password" name="confirm_password" placeholder="Re-enter new password" autocomplete="new-password" minlength="8" />
+        </label>
+        <button class="btn primary login-submit" type="submit">
+          <span>Set new password</span>
+        </button>
+      </div>
+      <button class="login-forgot" type="button" data-reset-cancel>Back to sign in</button>
+      <p class="login-error" data-reset-message role="alert"></p>
     </form>
 
     <!-- HRMS-only mode: org has access_mode=hrms_link. No password, no magic
@@ -86,6 +147,5 @@
       </p>
     </div>
 
-    <p class="login-trust">Encrypted &middot; Audit&#8209;logged</p>
   </div>
 </section>

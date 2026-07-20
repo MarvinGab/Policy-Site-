@@ -76,6 +76,17 @@
   animation: brand-in 700ms ease forwards;
   transition: transform 320ms ease;
 }
+/* Show only the logo that matches the active theme. Dark themes = midnight,
+   carbon; anything else falls through to light. */
+.header-logo-dark { display: none; }
+html[data-theme="midnight"] .header-logo-light,
+html[data-theme="carbon"] .header-logo-light,
+body[data-theme="midnight"] .header-logo-light,
+body[data-theme="carbon"] .header-logo-light { display: none; }
+html[data-theme="midnight"] .header-logo-dark,
+html[data-theme="carbon"] .header-logo-dark,
+body[data-theme="midnight"] .header-logo-dark,
+body[data-theme="carbon"] .header-logo-dark { display: block; }
 
 .brand-text {
   display: grid;
@@ -297,5 +308,49 @@
 
   .header-links {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-header {
+    padding: 10px 12px 8px;
+  }
+
+  .header-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    padding: 12px 14px;
+    border-radius: 20px;
+  }
+
+  .header-logo {
+    max-width: 150px;
+    height: 38px;
+  }
+
+  .header-nav {
+    display: contents;
+  }
+
+  .header-links {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .header-ctas {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .header-ctas .header-policy {
+    display: none;
+  }
+
+  .header-ctas .btn {
+    padding: 8px 13px;
+    min-height: 36px;
   }
 }

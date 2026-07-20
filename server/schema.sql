@@ -185,10 +185,15 @@ create index if not exists policy_chunks_policy_id_idx on policy_chunks(policy_i
 create table if not exists org_people (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
+  employee_code text,
   email text not null,
   name text,
   password_hash text,
   must_reset_password boolean not null default true,
+  -- Temp passwords issued at invite time expire after 7 days. On successful
+  -- password change we clear this back to NULL so a chosen password never
+  -- expires just because it was set from a temp one earlier.
+  password_expires_at timestamptz,
   role text not null default 'employee' check (role in ('employee', 'admin')),
   status text not null default 'draft' check (status in ('draft', 'invited', 'active', 'disabled')),
   invited_at timestamptz,
@@ -197,10 +202,15 @@ create table if not exists org_people (
 );
 
 alter table org_people
+  add column if not exists employee_code text,
   add column if not exists password_hash text,
-  add column if not exists must_reset_password boolean not null default true;
+  add column if not exists must_reset_password boolean not null default true,
+  add column if not exists password_expires_at timestamptz;
 
 create index if not exists org_people_company_idx on org_people(company_id);
+create unique index if not exists org_people_company_employee_code_uq
+  on org_people(company_id, employee_code)
+  where employee_code is not null and employee_code <> '';
 
 -- ============================================================================
 -- Per-org SMTP credentials + invite-email draft.
@@ -214,7 +224,7 @@ create index if not exists org_people_company_idx on org_people(company_id);
 -- ============================================================================
 
 create table if not exists magic_tokens (
-  token text primary key,                 -- random 64-char URL-safe string
+  token text primary key,                 -- SHA-256 hash of the URL token
   company_id uuid not null references companies(id) on delete cascade,
   email text not null,
   -- 'invite' (admin-issued, 7-day expiry) vs 'recovery' (user-requested, 15-min expiry).
@@ -227,6 +237,21 @@ create table if not exists magic_tokens (
 
 create index if not exists magic_tokens_email_idx on magic_tokens(email);
 create index if not exists magic_tokens_company_idx on magic_tokens(company_id);
+
+-- Password reset OTPs for standalone employee/admin password login. OTPs are
+-- hashed at rest, short-lived, and single-use.
+create table if not exists password_reset_otps (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies(id) on delete cascade,
+  person_id uuid not null references org_people(id) on delete cascade,
+  otp_hash text not null,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists password_reset_otps_person_idx on password_reset_otps(person_id);
+create index if not exists password_reset_otps_company_idx on password_reset_otps(company_id);
 
 -- Per-user daily chat counter. Keyed by user_id + day so the row count
 -- naturally bounds at active_users * retention. Used to enforce the
@@ -257,6 +282,57 @@ begin
 end;
 $$;
 
+-- Per-org daily chat counter. Prevents one company from exhausting the AI
+-- budget for everyone else.
+create table if not exists org_chat_usage (
+  company_id uuid not null references companies(id) on delete cascade,
+  day date not null,
+  count int not null default 0,
+  primary key (company_id, day)
+);
+
+create index if not exists org_chat_usage_day_idx on org_chat_usage(day);
+
+create or replace function increment_org_chat_usage(p_company_id uuid, p_day date)
+returns int
+language plpgsql as $$
+declare
+  new_count int;
+begin
+  insert into org_chat_usage (company_id, day, count)
+  values (p_company_id, p_day, 1)
+  on conflict (company_id, day) do update
+    set count = org_chat_usage.count + 1
+  returning count into new_count;
+  return new_count;
+end;
+$$;
+
+-- Cached AI answers, scoped to org and document index version. If policies
+-- are re-uploaded/re-indexed, the version changes and stale answers are not
+-- reused.
+create table if not exists chat_answer_cache (
+  company_id uuid not null references companies(id) on delete cascade,
+  question_hash text not null,
+  index_version text not null,
+  answer text not null,
+  sources jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  primary key (company_id, question_hash, index_version)
+);
+
+create index if not exists chat_answer_cache_created_idx on chat_answer_cache(created_at);
+
+-- Production session storage for express-session. Avoids local filesystem
+-- sessions, which are unsafe for multi-instance deploys and restarts.
+create table if not exists app_sessions (
+  sid text primary key,
+  sess jsonb not null,
+  expire timestamptz not null
+);
+
+create index if not exists app_sessions_expire_idx on app_sessions(expire);
+
 create table if not exists org_smtp_settings (
   company_id uuid primary key references companies(id) on delete cascade,
   host text,
@@ -274,6 +350,25 @@ create table if not exists org_email_drafts (
   body text not null default 'Hello {{name}}, you have been added to the {{organization}} policy portal.',
   updated_at timestamptz not null default now()
 );
+
+-- Reusable communication templates. One template per organization is marked
+-- as the active employee invite and is used when credentials are sent.
+create table if not exists org_email_templates (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies(id) on delete cascade,
+  name text not null,
+  subject text not null,
+  body text not null,
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists org_email_templates_company_idx
+  on org_email_templates(company_id);
+create unique index if not exists org_email_templates_one_default_uq
+  on org_email_templates(company_id)
+  where is_default = true;
 
 -- ============================================================================
 -- Per-org HRMS iframe launch configuration.
@@ -368,16 +463,23 @@ language sql stable as $$
     where policy_chunks.company_id = filter_company
       and to_tsvector('english', policy_chunks.chunk_text) @@ plainto_tsquery('english', query_text)
     limit match_count * 2
+  ),
+  fused_ids as (
+    select id from vector_hits
+    union
+    select id from text_hits
   )
   select
-    v.id,
-    v.policy_id,
-    v.chunk_text,
-    v.similarity,
+    c.id,
+    c.policy_id,
+    c.chunk_text,
+    coalesce(v.similarity, 0) as similarity,
     -- RRF with k=60 (standard); vector and text contribute independently
-    (1.0 / (60 + v.v_rank))::float + coalesce(1.0 / (60 + t.t_rank), 0)::float as hybrid_score
-  from vector_hits v
-  left join text_hits t on t.id = v.id
+    coalesce(1.0 / (60 + v.v_rank), 0)::float + coalesce(1.0 / (60 + t.t_rank), 0)::float as hybrid_score
+  from fused_ids f
+  join policy_chunks c on c.id = f.id
+  left join vector_hits v on v.id = f.id
+  left join text_hits t on t.id = f.id
   order by hybrid_score desc
   limit match_count;
 $$;

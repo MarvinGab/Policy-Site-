@@ -4,7 +4,32 @@
          before paint, so navigating to #people doesn't briefly show "Modules". -->
     <h1 data-admin-title></h1>
   </div>
-  <a class="admin-back" href="policies.html">Dashboard</a>
+  <div class="admin-head-actions">
+    <!-- People page only: slide-open sheet for CSV template / upload. -->
+    <div class="upload-sheet" data-upload-sheet data-people-only hidden>
+      <button class="upload-sheet-toggle" type="button" data-upload-sheet-toggle aria-expanded="false">
+        Upload sheet
+      </button>
+      <div class="upload-sheet-panel" data-upload-sheet-panel>
+        <button class="upload-sheet-mini" type="button" data-action="people-upload"
+                data-tooltip="Upload CSV" aria-label="Upload CSV">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 20V6M6 12l6-6 6 6"/>
+          </svg>
+        </button>
+        <button class="upload-sheet-mini" type="button" data-action="people-template"
+                data-tooltip="Download template" aria-label="Download template">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 4v14m-6-6 6 6 6-6"/>
+          </svg>
+        </button>
+        <input class="hidden-input" type="file" accept=".csv,text/csv" data-people-file />
+      </div>
+    </div>
+    <a class="admin-back" href="policies.html">Dashboard</a>
+  </div>
 </section>
 
 <section class="admin-section" data-admin-section="modules">
@@ -67,16 +92,121 @@
 
 <section class="admin-section" data-admin-section="people" data-mode-show="standalone" data-super-admin-section>
   <p class="admin-mode-note" data-people-mode-note></p>
-  <form class="people-form" data-people-form>
-    <input class="admin-input" name="email" type="email" placeholder="Email address" required />
-    <button class="admin-add-btn" type="submit">Add employee</button>
-  </form>
-  <div class="people-upload">
-    <input class="hidden-input" type="file" accept=".csv,text/csv" data-people-file />
-    <button class="icon-btn" type="button" data-action="people-upload">Upload CSV</button>
-    <span>CSV columns: email (one per line)</span>
+
+  <div class="register-toolbar" role="group" aria-label="Employee register actions">
+    <button class="register-toggle" type="button" data-register-toggle="add-employee" aria-expanded="false">
+      <span class="register-toggle-plus" aria-hidden="true">+</span> Add employee
+    </button>
+    <button class="register-toggle" type="button" data-register-toggle="add-admin" aria-expanded="false">
+      <span class="register-toggle-plus" aria-hidden="true">+</span> Add admin
+    </button>
+    <a class="register-toggle" href="#communication">
+      Communication
+    </a>
+    <button class="register-toggle" type="button" data-select-mode="invite" aria-pressed="false">
+      Invite
+    </button>
+    <button class="register-toggle register-toggle-danger" type="button" data-select-mode="delete" aria-pressed="false">
+      Delete
+    </button>
+  </div>
+
+  <!-- Selection bar: shown when Invite or Delete mode is on. -->
+  <div class="selection-bar" data-selection-bar hidden>
+    <label class="selection-select-all">
+      <input type="checkbox" data-select-all />
+      <span>Select all</span>
+    </label>
+    <span class="selection-count" data-selection-count>0 selected</span>
+    <button class="admin-add-btn selection-confirm" type="button" data-selection-confirm>Send invites</button>
+    <button class="register-toggle selection-cancel" type="button" data-selection-cancel>Cancel</button>
+  </div>
+
+  <div class="register-panel" data-register-panel="add-employee" hidden>
+    <form class="people-form register-form" data-people-form novalidate>
+      <input class="admin-input" name="employee_code" type="text" placeholder="Employee code" autocomplete="off" required />
+      <input class="admin-input" name="name" type="text" placeholder="Name (optional)" autocomplete="off" />
+      <input class="admin-input" name="email" type="email" placeholder="Email address" autocomplete="off" required
+             pattern="[^@\s]+@[^@\s]+\.[^@\s]+" />
+      <button class="admin-add-btn" type="submit">Save employee</button>
+      <p class="register-form-error" data-form-error hidden></p>
+    </form>
+  </div>
+
+  <div class="register-panel" data-register-panel="add-admin" hidden>
+    <form class="people-form register-form" data-people-admin-form novalidate>
+      <input class="admin-input" name="name" type="text" placeholder="Admin name" autocomplete="off" />
+      <input class="admin-input" name="email" type="email" placeholder="Admin email" autocomplete="off" required
+             pattern="[^@\s]+@[^@\s]+\.[^@\s]+" />
+      <label class="admin-checkbox">
+        <input type="checkbox" name="send_email" />
+        <span>Send invite email</span>
+      </label>
+      <button class="admin-add-btn" type="submit">Save admin</button>
+      <p class="register-form-error" data-form-error hidden></p>
+    </form>
+  </div>
+
+  <div class="people-search-row">
+    <div class="people-search-shell">
+      <svg class="people-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+        <path d="m20 20-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+      <input
+        class="people-search"
+        type="search"
+        placeholder="Search by name, employee code, or email…"
+        data-people-search
+        autocomplete="off"
+      />
+    </div>
   </div>
   <section class="people-list" data-people-list></section>
+</section>
+
+<section class="admin-section" data-admin-section="communication" data-mode-show="standalone" data-super-admin-section>
+  <div class="communication-layout">
+    <aside class="template-library">
+      <div class="template-library-head">
+        <h2>Templates</h2>
+        <button class="admin-add-btn" type="button" data-action="template-create">New</button>
+      </div>
+      <div class="template-list" data-template-list></div>
+    </aside>
+    <form class="template-editor" data-template-form novalidate>
+      <div class="template-editor-head">
+        <div>
+          <h2>Edit template</h2>
+          <p data-template-status>Select a template.</p>
+        </div>
+        <label class="admin-checkbox">
+          <input type="checkbox" name="is_default" />
+          <span>Use for employee invitations</span>
+        </label>
+      </div>
+      <label class="template-field">
+        <span>Template name</span>
+        <input class="admin-input" name="name" type="text" maxlength="80" required />
+      </label>
+      <label class="template-field">
+        <span>Email subject</span>
+        <input class="admin-input" name="subject" type="text" maxlength="200" required />
+      </label>
+      <label class="template-field">
+        <span>Email body</span>
+        <textarea class="admin-textarea" name="body" rows="14" required></textarea>
+      </label>
+      <p class="comm-help">
+        Placeholders: <code>{{name}}</code>, <code>{{employee_code}}</code>,
+        <code>{{password}}</code>, <code>{{login_url}}</code>, <code>{{org_name}}</code>.
+      </p>
+      <div class="comm-actions">
+        <button class="icon-btn" type="button" data-action="template-delete">Delete</button>
+        <button class="admin-add-btn" type="submit">Save template</button>
+      </div>
+    </form>
+  </div>
 </section>
 
 <section class="admin-section" data-admin-section="settings" data-super-admin-section>
@@ -90,6 +220,20 @@
           <em>policies.zarohr owns users, passwords, invites, and email delivery.</em>
         </span>
       </label>
+      <!-- Login URL card. Sits right after the Standalone option and is
+           only shown when Standalone is the active access mode; toggled
+           in admin.js. -->
+      <div class="settings-url-card" data-org-url-card hidden>
+        <div class="settings-url-head">
+          <strong>Employee login URL</strong>
+          <span class="settings-url-sub">Share this with your team. New employees also receive it in their invite email.</span>
+        </div>
+        <div class="settings-url-row">
+          <code class="settings-url" data-org-login-url>Loading…</code>
+          <button class="icon-btn" type="button" data-action="copy-org-url">Copy</button>
+          <a class="icon-btn" data-org-login-open target="_blank" rel="noopener">Open</a>
+        </div>
+      </div>
       <label class="settings-radio">
         <input type="radio" name="access_mode" value="hrms_link" />
         <span>
@@ -169,8 +313,6 @@
       <input class="admin-input" name="from_email" type="email" placeholder="From email" />
       <input class="admin-input" name="from_name" type="text" placeholder="From name" />
     </div>
-    <input class="admin-input" name="subject" type="text" placeholder="Invite subject" />
-    <textarea class="admin-textarea" name="body" rows="6" placeholder="Invite draft"></textarea>
-    <button class="admin-add-btn" type="submit">Save email settings</button>
+    <button class="admin-add-btn" type="submit">Save SMTP settings</button>
   </form>
 </section>

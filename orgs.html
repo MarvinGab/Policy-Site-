@@ -216,7 +216,10 @@
         color: var(--ink);
         line-height: 1.1;
         letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
       }
+      /* Denominator + slash go muted so "uploaded/total" reads at a glance. */
+      .stat-total { color: var(--ink-muted); font-weight: 500; }
 
       .stat-label {
         font-size: 0.72rem;
