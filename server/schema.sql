@@ -26,7 +26,12 @@ create table if not exists companies (
 -- Catch-up for older databases that pre-date these columns.
 alter table companies
   add column if not exists access_token text,
-  add column if not exists access_mode text not null default 'standalone';
+  add column if not exists access_mode text not null default 'standalone',
+  add column if not exists theme_id text not null default 'default',
+  add column if not exists logo_url text,
+  add column if not exists portal_name text,
+  add column if not exists login_background_color text,
+  add column if not exists login_background_image_url text;
 
 -- The CHECK constraint may not exist on older rows that pre-date this column;
 -- re-applying it is safe if it's already there.

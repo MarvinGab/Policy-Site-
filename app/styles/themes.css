@@ -5,6 +5,7 @@ body[data-theme="sky"] {
   --ink-muted: rgba(22, 33, 58, 0.7);
   --accent: #2f7bff;
   --accent-soft: rgba(47, 123, 255, 0.16);
+  --accent-rgb: 47, 123, 255;
   --brand-yellow: #f0c24d;
   --outline: rgba(22, 33, 58, 0.14);
   --panel: rgba(246, 249, 255, 0.94);
@@ -24,6 +25,7 @@ body[data-theme="sand"] {
   --ink-muted: rgba(43, 36, 25, 0.68);
   --accent: #c8742f;
   --accent-soft: rgba(200, 116, 47, 0.14);
+  --accent-rgb: 200, 116, 47;
   --brand-yellow: #f3c05a;
   --outline: rgba(43, 36, 25, 0.12);
   --panel: rgba(255, 252, 247, 0.92);
@@ -43,6 +45,7 @@ body[data-theme="mint"] {
   --ink-muted: rgba(27, 42, 38, 0.65);
   --accent: #1f8f6b;
   --accent-soft: rgba(31, 143, 107, 0.14);
+  --accent-rgb: 31, 143, 107;
   --brand-yellow: #f0c24d;
   --outline: rgba(27, 42, 38, 0.12);
   --panel: rgba(247, 255, 252, 0.92);
@@ -62,6 +65,7 @@ body[data-theme="midnight"] {
   --ink-muted: rgba(230, 237, 247, 0.68);
   --accent: #6f8bff;
   --accent-soft: rgba(111, 139, 255, 0.16);
+  --accent-rgb: 111, 139, 255;
   --brand-yellow: #f2c96b;
   --outline: rgba(230, 237, 247, 0.22);
   --panel: rgba(18, 24, 40, 0.92);
@@ -81,6 +85,7 @@ body[data-theme="carbon"] {
   --ink-muted: rgba(237, 240, 245, 0.66);
   --accent: #f08a4b;
   --accent-soft: rgba(240, 138, 75, 0.18);
+  --accent-rgb: 240, 138, 75;
   --brand-yellow: #f7c768;
   --outline: rgba(237, 240, 245, 0.22);
   --panel: rgba(28, 31, 38, 0.94);
@@ -91,4 +96,15 @@ body[data-theme="carbon"] {
     radial-gradient(780px 420px at 85% 10%, rgba(111, 139, 255, 0.2), transparent 70%),
     linear-gradient(180deg, #0b0c10 0%, #0f1117 55%, #141821 100%);
   background: var(--page-bg);
+}
+
+/* Success tokens shift lighter on the dark themes so the "HRMS Tile" chip
+   stays legible (dark-on-dark otherwise). Light themes inherit :root. */
+html[data-theme="midnight"],
+body[data-theme="midnight"],
+html[data-theme="carbon"],
+body[data-theme="carbon"] {
+  --success: #5fce93;
+  --success-soft: rgba(95, 206, 147, 0.14);
+  --success-border: rgba(95, 206, 147, 0.3);
 }

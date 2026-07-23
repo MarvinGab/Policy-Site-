@@ -19,7 +19,7 @@
           </svg>
         </button>
         <button class="upload-sheet-mini" type="button" data-action="people-template"
-                data-tooltip="Download template" aria-label="Download template">
+                data-tooltip="Download PolicySite template" aria-label="Download PolicySite template">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                   d="M12 4v14m-6-6 6 6 6-6"/>
@@ -28,9 +28,12 @@
         <input class="hidden-input" type="file" accept=".csv,text/csv" data-people-file />
       </div>
     </div>
-    <a class="admin-back" href="policies.html">Dashboard</a>
   </div>
 </section>
+
+<!-- Fixed circular back arrow, bottom-left. Reuses the dashboard's
+     .org-back-link affordance; replaces the old "Dashboard" header pill. -->
+<a class="org-back-link" href="policies.html" aria-label="Back to dashboard"><span aria-hidden="true">‹</span></a>
 
 <section class="admin-section" data-admin-section="modules">
   <div class="modules-toolbar">
@@ -211,7 +214,7 @@
 
 <section class="admin-section" data-admin-section="settings" data-super-admin-section>
   <form class="settings-form" data-settings-form>
-    <fieldset class="settings-fieldset">
+    <fieldset class="settings-fieldset access-mode-fieldset">
       <legend>Access mode</legend>
       <label class="settings-radio">
         <input type="radio" name="access_mode" value="standalone" />
@@ -219,21 +222,8 @@
           <strong>Standalone</strong>
           <em>policies.zarohr owns users, passwords, invites, and email delivery.</em>
         </span>
+        <button class="settings-copy-btn" type="button" data-action="copy-org-url" hidden>Copy</button>
       </label>
-      <!-- Login URL card. Sits right after the Standalone option and is
-           only shown when Standalone is the active access mode; toggled
-           in admin.js. -->
-      <div class="settings-url-card" data-org-url-card hidden>
-        <div class="settings-url-head">
-          <strong>Employee login URL</strong>
-          <span class="settings-url-sub">Share this with your team. New employees also receive it in their invite email.</span>
-        </div>
-        <div class="settings-url-row">
-          <code class="settings-url" data-org-login-url>Loading…</code>
-          <button class="icon-btn" type="button" data-action="copy-org-url">Copy</button>
-          <a class="icon-btn" data-org-login-open target="_blank" rel="noopener">Open</a>
-        </div>
-      </div>
       <label class="settings-radio">
         <input type="radio" name="access_mode" value="hrms_link" />
         <span>
@@ -243,6 +233,89 @@
       </label>
     </fieldset>
     <button class="admin-add-btn" type="submit">Save settings</button>
+  </form>
+</section>
+
+<section class="admin-section" data-admin-section="branding" data-super-admin-section>
+  <form class="settings-form branding-form" data-branding-form>
+    <fieldset class="settings-fieldset branding-fieldset">
+      <legend>Branding</legend>
+
+      <!-- Portal theme: swatch selector (hidden input carries the value) -->
+      <div class="brand-field">
+        <div class="brand-field-head">
+          <strong>Portal theme</strong>
+          <em>Used across the portal.</em>
+        </div>
+        <div class="theme-swatches" data-theme-swatches role="radiogroup" aria-label="Portal theme">
+          <button type="button" class="swatch" data-theme="default"  aria-pressed="true"  style="--sw:linear-gradient(135deg,#3f68ff,#74b2ff)"><span class="swatch-chip"></span><span class="swatch-name">Default</span></button>
+          <button type="button" class="swatch" data-theme="sky"      aria-pressed="false" style="--sw:linear-gradient(135deg,#5f7dff,#8ad0ff)"><span class="swatch-chip"></span><span class="swatch-name">Sky</span></button>
+          <button type="button" class="swatch" data-theme="sand"     aria-pressed="false" style="--sw:linear-gradient(135deg,#c8742f,#f2c07a)"><span class="swatch-chip"></span><span class="swatch-name">Sand</span></button>
+          <button type="button" class="swatch" data-theme="mint"     aria-pressed="false" style="--sw:linear-gradient(135deg,#1f8f6b,#7ddac2)"><span class="swatch-chip"></span><span class="swatch-name">Mint</span></button>
+          <button type="button" class="swatch" data-theme="midnight" aria-pressed="false" style="--sw:linear-gradient(135deg,#1a2340,#4f63ff)"><span class="swatch-chip"></span><span class="swatch-name">Midnight</span></button>
+          <button type="button" class="swatch" data-theme="carbon"   aria-pressed="false" style="--sw:linear-gradient(135deg,#12151c,#f08a4b)"><span class="swatch-chip"></span><span class="swatch-name">Carbon</span></button>
+        </div>
+        <input type="hidden" name="theme_id" value="default" />
+      </div>
+
+      <!-- Portal name -->
+      <div class="brand-field">
+        <div class="brand-field-head">
+          <strong>Portal name</strong>
+          <em>Shown on the login screen.</em>
+        </div>
+        <input class="brand-input" name="portal_name" type="text" maxlength="80" placeholder="Your Policy Portal" />
+      </div>
+
+      <!-- Login background: one segmented control, theme / color / image -->
+      <div class="brand-field">
+        <div class="brand-field-head">
+          <strong>Login background</strong>
+          <em>Choose a color or image.</em>
+        </div>
+        <div class="seg" data-bg-mode role="radiogroup" aria-label="Login background">
+          <button type="button" class="seg-option" data-bg-option="theme" aria-pressed="true">Match theme</button>
+          <button type="button" class="seg-option" data-bg-option="color" aria-pressed="false">Solid color</button>
+          <button type="button" class="seg-option" data-bg-option="image" aria-pressed="false">Image</button>
+        </div>
+        <input type="hidden" name="login_background_mode" value="theme" />
+
+        <div class="bg-panel" data-bg-panel="color" hidden>
+          <label class="brand-color">
+            <input type="color" data-color-picker value="#101827" aria-label="Pick background color" />
+            <input class="brand-input brand-color-hex" name="login_background_color" type="text" maxlength="7" placeholder="#101827" pattern="#[0-9a-fA-F]{6}" />
+          </label>
+        </div>
+
+        <div class="bg-panel" data-bg-panel="image" hidden>
+          <div class="brand-upload">
+            <button type="button" class="brand-upload-btn" data-upload-trigger="login_background_file">Choose image…</button>
+            <input class="brand-file" name="login_background_file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+            <span class="brand-upload-name" data-upload-name="login_background_file">No file chosen</span>
+            <button type="button" class="brand-upload-clear" data-upload-clear="login_background_file" hidden aria-label="Remove image">×</button>
+          </div>
+          <p class="brand-hint">PNG, JPG, or WebP · up to 3 MB</p>
+          <div class="brand-preview" data-preview="login_background_file" hidden><img alt="Login background preview" /></div>
+        </div>
+      </div>
+
+      <!-- Company logo -->
+      <div class="brand-field">
+        <div class="brand-field-head">
+          <strong>Company logo</strong>
+          <em>Replaces the ZaroHR mark in the header for your organization.</em>
+        </div>
+        <div class="brand-upload">
+          <button type="button" class="brand-upload-btn" data-upload-trigger="logo_file">Choose file…</button>
+          <input class="brand-file" name="logo_file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          <span class="brand-upload-name" data-upload-name="logo_file">No file chosen</span>
+          <button type="button" class="brand-upload-clear" data-upload-clear="logo_file" hidden aria-label="Remove logo">×</button>
+        </div>
+        <p class="brand-hint">PNG, JPG, or WebP · up to 1 MB</p>
+        <div class="brand-preview brand-preview--logo" data-preview="logo_file" hidden><img alt="Logo preview" /></div>
+      </div>
+    </fieldset>
+    <div class="branding-actions"><button class="btn ghost" type="button" data-discard-branding disabled hidden>Discard changes</button><button class="btn primary branding-save" type="submit" data-save-branding disabled hidden>Save changes</button></div>
   </form>
 </section>
 

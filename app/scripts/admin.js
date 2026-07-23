@@ -45,6 +45,7 @@ export const initAdmin = () => {
   const templateList = document.querySelector("[data-template-list]");
   const templateStatus = document.querySelector("[data-template-status]");
   const settingsForm = document.querySelector("[data-settings-form]");
+  const brandingForm = document.querySelector("[data-branding-form]");
   const hrmsForm = document.querySelector("[data-hrms-settings]");
   const hrmsLaunchUrl = document.querySelector("[data-hrms-launch-url]");
   const hrmsSecret = document.querySelector("[data-hrms-secret]");
@@ -62,6 +63,7 @@ export const initAdmin = () => {
     email: "Email",
     hrms: "HRMS Access",
     settings: "Settings",
+    branding: "Branding",
   };
   let activeFilter = "all";
   let policyData = [];
@@ -74,6 +76,7 @@ export const initAdmin = () => {
 
   const isSectionAllowed = (section) => {
     if (section !== "modules" && !isSuperAdmin) return false;
+    if (section === "branding") return true;
     if (section === "people" || section === "communication" || section === "email") {
       return accessMode !== "hrms_link";
     }
@@ -99,25 +102,19 @@ export const initAdmin = () => {
     }
   };
 
-  // Build the org's public login URL from the current session and paint it
-  // into the Settings card. Only visible when the Standalone radio is the
-  // active access mode — the URL is meaningless in HRMS Tile mode where
-  // HRMS owns the entry point.
+  // Keep the org's public login URL ready for the compact Standalone copy action.
   const renderOrgLoginUrl = async () => {
-    const card = document.querySelector("[data-org-url-card]");
-    if (!card) return;
+    const copyBtn = document.querySelector("[data-action='copy-org-url']");
+    if (!copyBtn) return;
     const standaloneRadio = settingsForm?.querySelector('input[name="access_mode"][value="standalone"]');
-    if (!standaloneRadio?.checked) { card.hidden = true; return; }
+    if (!standaloneRadio?.checked) { copyBtn.hidden = true; return; }
     try {
       const url = orgLoginUrl || (await apiJson("/api/org/settings")).login_url;
-      if (!url) { card.hidden = true; return; }
-      const codeEl = card.querySelector("[data-org-login-url]");
-      const openEl = card.querySelector("[data-org-login-open]");
-      if (codeEl) codeEl.textContent = url;
-      if (openEl) openEl.setAttribute("href", url);
-      card.hidden = false;
+      if (!url) { copyBtn.hidden = true; return; }
+      orgLoginUrl = url;
+      copyBtn.hidden = false;
     } catch {
-      card.hidden = true;
+      copyBtn.hidden = true;
     }
   };
 
@@ -126,19 +123,18 @@ export const initAdmin = () => {
       const data = await apiJson("/api/org/settings");
       accessMode = data.access_mode || "standalone";
       orgLoginUrl = data.login_url || "";
-    if (settingsForm) {
+      if (settingsForm) {
         const radio = settingsForm.querySelector(`input[name="access_mode"][value="${accessMode}"]`);
         if (radio) radio.checked = true;
+        const branding = data.branding || {};
+        const setValue = (name, value) => { const input = settingsForm.elements[name]; if (input && value) input.value = value; };
+        setValue("theme_id", branding.theme_id || "default");
+        setValue("portal_name", branding.portal_name);
+        setValue("login_background_color", branding.login_background_color);
+        populateBranding(branding);
       }
-      if (isSuperAdmin) await loadAdmins();
       applyAccessMode();
       await renderOrgLoginUrl();
-      if (accessMode === "standalone") {
-        await loadPeople();
-        await loadEmailSettings();
-      } else {
-        await loadHrmsSettings();
-      }
     } catch (error) {
       console.error("Settings load failed:", error);
     }
@@ -226,15 +222,34 @@ export const initAdmin = () => {
 
   const activateTab = (tab) => {
     const [requestedTab = "modules", query = ""] = String(tab || "modules").split("?");
-    const nextTab = isSectionAllowed(requestedTab) ? requestedTab : "modules";
+    const brandingMode = requestedTab === "branding";
+    const sectionTab = requestedTab;
+    const nextTab = isSectionAllowed(sectionTab) ? sectionTab : "modules";
     document.querySelectorAll("[data-admin-section]").forEach((section) => {
       section.classList.toggle("is-active", section.dataset.adminSection === nextTab);
+      section.classList.toggle("is-branding-view", false);
     });
-    if (adminTitle) adminTitle.textContent = tabTitles[nextTab] || "Manage organization";
+    if (adminTitle) adminTitle.textContent = brandingMode ? "Branding" : (tabTitles[nextTab] || "Manage organization");
+    // Branding view: the section's own "Branding" legend is the heading, so
+    // the shared admin head (duplicate H1 + old back pill) is hidden via CSS.
+    document.body.classList.toggle("admin-branding", brandingMode);
+    settingsForm?.classList.toggle("branding-mode", brandingMode);
     const normalizedHash = query ? `#${nextTab}?${query}` : `#${nextTab}`;
     if (window.location.hash !== normalizedHash) window.history.replaceState(null, "", normalizedHash);
     if (nextTab === "modules" && query.includes("create=1")) {
       setTimeout(() => document.querySelector("[data-module-create] input[name='name']")?.focus(), 50);
+    }
+    if (nextTab === "modules") {
+      loadModules();
+    }
+    if (nextTab === "admins") {
+      loadAdmins();
+    }
+    if (nextTab === "people") {
+      loadPeople();
+    }
+    if (nextTab === "email") {
+      loadEmailSettings();
     }
     if (nextTab === "hrms") {
       loadHrmsSettings();
@@ -253,18 +268,180 @@ export const initAdmin = () => {
     }
   };
 
+  // ---- Branding controls: theme swatches, background mode, image uploads ----
+  const bgModeInput = brandingForm?.elements.login_background_mode;
+  const colorPicker = brandingForm?.querySelector("[data-color-picker]");
+  const colorHex = brandingForm?.elements.login_background_color;
+  // Tracks whether the admin explicitly removed a stored image (vs just not
+  // re-picking one), so save knows when to send "" to clear it server-side.
+  const brandingState = { logoCleared: false, bgCleared: false };
+  let savedBrandingSnapshot = null;
+  const normalizeBranding = (branding = {}) => ({
+    theme_id: branding.theme_id || "default",
+    portal_name: (branding.portal_name || "").trim(),
+    login_background_color: branding.login_background_color || "",
+    login_background_image_url: branding.login_background_image_url || "",
+    logo_url: branding.logo_url || "",
+  });
+  const getCurrentBrandingSnapshot = () => {
+    if (!brandingForm) return normalizeBranding();
+    const mode = bgModeInput?.value || "theme";
+    const bgFile = brandingForm.elements.login_background_file?.files?.[0];
+    const logoFile = brandingForm.elements.logo_file?.files?.[0];
+    return {
+      theme_id: brandingForm.elements.theme_id?.value || "default",
+      portal_name: (brandingForm.elements.portal_name?.value || "").trim(),
+      login_background_color: mode === "color" ? (brandingForm.elements.login_background_color?.value || "").trim() : "",
+      login_background_image_url: mode === "image"
+        ? bgFile?.name || (brandingState.bgCleared ? "" : savedBrandingSnapshot?.login_background_image_url || "")
+        : "",
+      logo_url: logoFile?.name || (brandingState.logoCleared ? "" : savedBrandingSnapshot?.logo_url || ""),
+    };
+  };
+  const setBrandingDirty = (dirty) => {
+    const save = brandingForm?.querySelector("[data-save-branding]");
+    const discard = brandingForm?.querySelector("[data-discard-branding]");
+    [save, discard].forEach((button) => {
+      if (!button) return;
+      button.toggleAttribute("disabled", !dirty);
+      button.hidden = !dirty;
+    });
+  };
+  const updateBrandingDirty = () => {
+    setBrandingDirty(JSON.stringify(getCurrentBrandingSnapshot()) !== JSON.stringify(savedBrandingSnapshot || normalizeBranding()));
+  };
+
+  const setThemeSwatch = (themeId) => {
+    if (!brandingForm) return;
+    const value = themeId || "default";
+    brandingForm.elements.theme_id.value = value;
+    brandingForm.querySelectorAll("[data-theme-swatches] .swatch").forEach((btn) => {
+      btn.setAttribute("aria-pressed", String(btn.dataset.theme === value));
+    });
+    window.__orgTheme = value;
+    if (value === "default") {
+      document.documentElement.removeAttribute("data-theme");
+      document.body.removeAttribute("data-theme");
+    } else {
+      document.documentElement.dataset.theme = value;
+      document.body.dataset.theme = value;
+    }
+  };
+
+  const setBgMode = (mode) => {
+    const value = ["theme", "color", "image"].includes(mode) ? mode : "theme";
+    if (bgModeInput) bgModeInput.value = value;
+    brandingForm?.querySelectorAll("[data-bg-mode] .seg-option").forEach((btn) => {
+      btn.setAttribute("aria-pressed", String(btn.dataset.bgOption === value));
+    });
+    brandingForm?.querySelectorAll("[data-bg-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.bgPanel !== value;
+    });
+  };
+
+  const setUploadName = (field, name) => {
+    const label = brandingForm?.querySelector(`[data-upload-name="${field}"]`);
+    const clear = brandingForm?.querySelector(`[data-upload-clear="${field}"]`);
+    if (label) label.textContent = name || "No file chosen";
+    if (clear) clear.hidden = !name;
+  };
+
+  const showPreview = (field, src) => {
+    const wrap = brandingForm?.querySelector(`[data-preview="${field}"]`);
+    const img = wrap?.querySelector("img");
+    if (src) { if (img) img.src = src; if (wrap) wrap.hidden = false; }
+    else { if (img) img.removeAttribute("src"); if (wrap) wrap.hidden = true; }
+  };
+
+  const populateBranding = (branding = {}) => {
+    if (!brandingForm) return;
+    setThemeSwatch(branding.theme_id || "default");
+    if (brandingForm.elements.portal_name) brandingForm.elements.portal_name.value = branding.portal_name || "";
+    const color = branding.login_background_color || "";
+    const bgImage = branding.login_background_image_url || "";
+    if (color) {
+      if (colorHex) colorHex.value = color;
+      if (colorPicker && /^#[0-9a-f]{6}$/i.test(color)) colorPicker.value = color;
+    } else if (colorHex) {
+      colorHex.value = "";
+    }
+    setBgMode(bgImage ? "image" : color ? "color" : "theme");
+    brandingState.logoCleared = false;
+    brandingState.bgCleared = false;
+    if (brandingForm.elements.logo_file) brandingForm.elements.logo_file.value = "";
+    if (brandingForm.elements.login_background_file) brandingForm.elements.login_background_file.value = "";
+    showPreview("logo_file", branding.logo_url || "");
+    setUploadName("logo_file", branding.logo_url ? "Current logo" : "");
+    showPreview("login_background_file", bgImage);
+    setUploadName("login_background_file", bgImage ? "Current image" : "");
+    savedBrandingSnapshot = normalizeBranding(branding);
+    setBrandingDirty(false);
+  };
+
+  brandingForm?.addEventListener("input", updateBrandingDirty);
+  brandingForm?.addEventListener("change", updateBrandingDirty);
+  brandingForm?.querySelector("[data-discard-branding]")?.addEventListener("click", async () => {
+    const data = await apiJson("/api/org/settings");
+    populateBranding(data.branding || {});
+  });
+
+  brandingForm?.querySelector("[data-theme-swatches]")?.addEventListener("click", (event) => {
+    const swatch = event.target.closest(".swatch");
+    if (swatch) { setThemeSwatch(swatch.dataset.theme); updateBrandingDirty(); }
+  });
+  brandingForm?.querySelector("[data-bg-mode]")?.addEventListener("click", (event) => {
+    const option = event.target.closest(".seg-option");
+    if (option) { setBgMode(option.dataset.bgOption); updateBrandingDirty(); }
+  });
+  colorPicker?.addEventListener("input", () => { if (colorHex) colorHex.value = colorPicker.value.toUpperCase(); updateBrandingDirty(); });
+  colorHex?.addEventListener("input", () => {
+    if (colorPicker && /^#[0-9a-f]{6}$/i.test(colorHex.value)) colorPicker.value = colorHex.value;
+    updateBrandingDirty();
+  });
+  brandingForm?.querySelectorAll("[data-upload-trigger]").forEach((btn) => {
+    btn.addEventListener("click", () => brandingForm.elements[btn.dataset.uploadTrigger]?.click());
+  });
+  brandingForm?.querySelectorAll(".brand-file").forEach((input) => {
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (input.name === "logo_file") brandingState.logoCleared = false;
+      if (input.name === "login_background_file") brandingState.bgCleared = false;
+      setUploadName(input.name, file?.name || "");
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => showPreview(input.name, reader.result);
+        reader.readAsDataURL(file);
+      } else {
+        showPreview(input.name, "");
+      }
+      updateBrandingDirty();
+    });
+  });
+  brandingForm?.querySelectorAll("[data-upload-clear]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const field = btn.dataset.uploadClear;
+      const input = brandingForm.elements[field];
+      if (input) input.value = "";
+      setUploadName(field, "");
+      showPreview(field, "");
+      if (field === "logo_file") brandingState.logoCleared = true;
+      if (field === "login_background_file") brandingState.bgCleared = true;
+      updateBrandingDirty();
+    });
+  });
+
   const initialAdminRoute = (window.location.hash || "#modules").slice(1);
   loadSettings().finally(() => activateTab(initialAdminRoute));
-  loadModules();
 
   settingsForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const selected = settingsForm.querySelector('input[name="access_mode"]:checked')?.value;
     if (!selected) return;
     try {
+      const payload = { access_mode: selected };
       const data = await apiJson("/api/org/settings", {
         method: "PATCH",
-        body: JSON.stringify({ access_mode: selected }),
+        body: JSON.stringify(payload),
       });
       accessMode = data.access_mode || selected;
       applyAccessMode();
@@ -281,6 +458,60 @@ export const initAdmin = () => {
     } catch (error) {
       showToast(error.message || "Could not save settings.", "error");
     }
+  });
+
+  brandingForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      // access_mode is required by PATCH /api/org/settings; branding never
+      // changes it, so echo the org's current mode back.
+      const payload = {
+        access_mode: accessMode || "standalone",
+        theme_id: brandingForm.elements.theme_id.value || "default",
+        portal_name: brandingForm.elements.portal_name.value.trim(),
+      };
+
+      // Login background is one choice: theme / color / image. Each mode
+      // clears the other field so only the selected style is stored.
+      const mode = bgModeInput?.value || "theme";
+      if (mode === "color") {
+        const hex = brandingForm.elements.login_background_color.value.trim();
+        payload.login_background_color = /^#[0-9a-f]{6}$/i.test(hex) ? hex : "";
+        payload.login_background_image_url = "";
+      } else if (mode === "image") {
+        payload.login_background_color = "";
+        const bgFile = brandingForm.elements.login_background_file.files?.[0];
+        if (bgFile) payload.login_background_image_url = await readFileAsDataUrl(bgFile);
+        else if (brandingState.bgCleared) payload.login_background_image_url = "";
+        // else: keep the existing stored image (omit the field).
+      } else {
+        payload.login_background_color = "";
+        payload.login_background_image_url = "";
+      }
+
+      const logoFile = brandingForm.elements.logo_file.files?.[0];
+      if (logoFile) payload.logo_url = await readFileAsDataUrl(logoFile);
+      else if (brandingState.logoCleared) payload.logo_url = "";
+
+      const data = await apiJson("/api/org/settings", { method: "PATCH", body: JSON.stringify(payload) });
+      populateBranding(data.branding || (await apiJson("/api/org/settings")).branding || {});
+      showToast("Branding saved.", "info");
+      // Reflect the theme immediately and refresh the per-host cache so it's
+      // enforced on the next load without a stale flash.
+      const chosen = payload.theme_id;
+      const themeKey = "zarohr-theme:" + window.location.host;
+      try {
+        if (chosen && chosen !== "default") {
+          document.documentElement.dataset.theme = chosen;
+          document.body.dataset.theme = chosen;
+          localStorage.setItem(themeKey, chosen);
+        } else {
+          document.documentElement.removeAttribute("data-theme");
+          document.body.removeAttribute("data-theme");
+          localStorage.removeItem(themeKey);
+        }
+      } catch { /* ignore storage errors */ }
+    } catch (error) { showToast(error.message || "Could not save branding.", "error"); }
   });
 
   hrmsForm?.addEventListener("submit", async (event) => {
@@ -522,8 +753,12 @@ export const initAdmin = () => {
 
     if (action === "add-policy" && module) {
       event.stopPropagation();
-      const input = module.querySelector(".admin-input");
-      const name = input?.value.trim();
+      const name = await promptDialog({
+        title: "Add policy",
+        label: "Policy name",
+        placeholder: "New policy name",
+        confirmText: "Add policy",
+      });
       if (!name) return;
       try {
         await apiJson(`/api/org/modules/${module.dataset.module}/policies`, {
@@ -1069,13 +1304,13 @@ export const initAdmin = () => {
     }
   });
 
-  // Toggle URL card as the user flips between access modes (before Save).
+  // Toggle Standalone copy action as the user flips between access modes.
   settingsForm?.querySelectorAll('input[name="access_mode"]').forEach((radio) => {
     radio.addEventListener("change", () => { renderOrgLoginUrl(); });
   });
 
   document.querySelector("[data-action='copy-org-url']")?.addEventListener("click", async () => {
-    const url = document.querySelector("[data-org-login-url]")?.textContent?.trim();
+    const url = orgLoginUrl || (await apiJson("/api/org/settings")).login_url;
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
@@ -1101,7 +1336,7 @@ export const initAdmin = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "employee-upload-template.csv";
+    link.download = "zarohr-policy-employee-upload-template.csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -1119,7 +1354,7 @@ export const initAdmin = () => {
         body: JSON.stringify({ people }),
       });
       peopleFile.value = "";
-      showToast("People imported. New employees received temporary passwords where email is configured.", "info");
+      showToast("People imported. Review the list, then send invites when ready.", "info");
       await loadPeople();
     } catch (error) {
       showToast(error.message || "Import failed.", "error");
@@ -1134,8 +1369,8 @@ export const initAdmin = () => {
     const id = row.dataset.personId;
     try {
       if (button.dataset.peopleAction === "invite") {
-        await apiJson(`/api/org/people/${id}`, { method: "PATCH", body: JSON.stringify({ status: "invited" }) });
-        showToast("Marked invited.", "info");
+        const data = await apiJson(`/api/org/people/${id}/resend-invite`, { method: "POST" });
+        showToast(data.email_sent ? "Invite email sent." : "Invite email was not sent.", data.email_sent ? "info" : "error");
       }
       if (button.dataset.peopleAction === "disable") {
         await apiJson(`/api/org/people/${id}`, { method: "PATCH", body: JSON.stringify({ status: "disabled" }) });
@@ -1231,8 +1466,9 @@ const renderAdminGrid = (grid, data, filterValue = "", filterMode = "all") => {
             </div>
           </header>
           <div class="admin-add">
-            <input class="admin-input" type="text" placeholder="New policy name" />
-            <button class="admin-add-btn" type="button" data-action="add-policy">Add policy</button>
+            <button class="admin-add-btn" type="button" data-action="add-policy">
+              <span class="admin-add-icon" aria-hidden="true">+</span> Add policy
+            </button>
           </div>
           <ul class="admin-policy-list">
             ${policyItems || `<li class="admin-empty">No policies in this module.</li>`}
@@ -1566,6 +1802,71 @@ const confirmDialog = ({ title, message, confirmText = "OK", cancelText = "Cance
     modal.querySelector("[data-dialog='confirm']").addEventListener("click", () => {
       cleanup();
       resolve(true);
+    });
+  });
+
+// Modal text-input prompt. Resolves with the trimmed value, or null if the
+// user cancels / submits empty. Mirrors confirmDialog so styling stays shared.
+const promptDialog = ({ title, label = "", placeholder = "", value = "", confirmText = "OK", cancelText = "Cancel" }) =>
+  new Promise((resolve) => {
+    const modal = document.createElement("div");
+    modal.className = "dialog-backdrop prompt-dialog-backdrop";
+    modal.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true">
+        <h3 class="dialog-title"></h3>
+        <div class="field">
+          <label></label>
+          <input type="text" />
+        </div>
+        <div class="dialog-actions">
+          <button class="btn ghost" data-dialog="cancel"></button>
+          <button class="btn primary" data-dialog="confirm"></button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelector(".dialog-title").textContent = title;
+    const labelEl = modal.querySelector("label");
+    if (label) labelEl.textContent = label;
+    else labelEl.remove();
+    const input = modal.querySelector("input");
+    input.placeholder = placeholder;
+    input.value = value;
+    modal.querySelector("[data-dialog='cancel']").textContent = cancelText;
+    modal.querySelector("[data-dialog='confirm']").textContent = confirmText;
+    // Force a frame so the .is-visible transition runs, then focus the field.
+    requestAnimationFrame(() => {
+      modal.classList.add("is-visible");
+      input.focus();
+    });
+
+    const cleanup = () => {
+      document.removeEventListener("keydown", onKey);
+      modal.remove();
+    };
+    const submit = () => {
+      const val = input.value.trim();
+      cleanup();
+      resolve(val || null);
+    };
+    const cancel = () => {
+      cleanup();
+      resolve(null);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") cancel();
+      else if (event.key === "Enter") {
+        event.preventDefault();
+        submit();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    modal.querySelector("[data-dialog='cancel']").addEventListener("click", cancel);
+    modal.querySelector("[data-dialog='confirm']").addEventListener("click", submit);
+    // Click on the dark backdrop (outside the dialog) cancels.
+    modal.addEventListener("mousedown", (event) => {
+      if (event.target === modal) cancel();
     });
   });
 

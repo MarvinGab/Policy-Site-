@@ -145,11 +145,11 @@ const renderList = () => {
                     <div class="org-stats">
                       <div class="stat-block" title="${uploadedPolicies} uploaded of ${totalPolicies}">
                         <span class="stat-value">${uploadedPolicies}<span class="stat-total">/${totalPolicies}</span></span>
-                        <span class="stat-label">Policies uploaded</span>
+                        <span class="stat-label">Policies</span>
                       </div>
                       <div class="stat-block">
                         <span class="stat-value">${employees}</span>
-                        <span class="stat-label">${employees === 1 ? "Employee" : "Employees"}</span>
+                        <span class="stat-label">Emp.</span>
                       </div>
                       <div class="stat-block">
                         <span class="stat-value">${admins}</span>
@@ -158,8 +158,8 @@ const renderList = () => {
                     </div>
 
                     <footer class="org-card-foot">
-                      <span class="org-card-created">Created ${formatDate(org.created_at)}</span>
-                      <span class="org-card-cta" aria-hidden="true">Open <span class="org-card-arrow">›</span></span>
+                      <span class="org-card-created">Created: ${formatDate(org.created_at)}</span>
+                      <span class="org-card-cta" aria-hidden="true">Open <span class="org-card-arrow">→</span></span>
                     </footer>
                   </div>
                 `;

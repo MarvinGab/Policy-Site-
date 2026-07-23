@@ -10,22 +10,22 @@
       <span data-banner-message></span>
     </div>
 
-    <!-- Animated welcome — cycles through short greetings. auth.js may still
-         populate data-login-sub for mode-specific copy; kept optional. -->
+    <!-- Portal name heading. auth.js fills [data-portal-name] from the org's
+         branding (falls back to the org name); the static default covers the
+         root/super-admin login where no org is resolved. -->
     <div class="login-head login-head-welcome">
-      <h2 class="login-welcome" aria-label="Welcome">
-        <span class="login-welcome-word" data-welcome>Welcome</span>
-      </h2>
+      <h2 class="login-portal-name" data-portal-name>Policy Portal</h2>
       <p class="login-sub" data-login-sub hidden></p>
     </div>
 
     <form class="login-form" id="login-form" novalidate>
       <label class="login-field">
-        <span data-identifier-label>Employee code or email</span>
+        <span class="sr-only" data-identifier-label>Email or Employee Code</span>
         <input
           type="text"
           name="email"
           required
+          placeholder="Email or Employee Code"
           autocomplete="email"
           autocapitalize="off"
           spellcheck="false"
@@ -37,10 +37,11 @@
            it based on hostname. Submitting from root redirects to the
            org's subdomain login. -->
       <label class="login-field" data-org-field hidden>
-        <span>Organization</span>
+        <span class="sr-only">Organization</span>
         <input
           type="text"
           name="organization"
+          placeholder="Organization"
           autocomplete="organization"
           autocapitalize="off"
           spellcheck="false"
@@ -50,11 +51,12 @@
 
       <!-- Password field — visible only in password mode (org subdomain). -->
       <label class="login-field" data-password-field>
-        <span>Password</span>
+        <span class="sr-only">Password</span>
         <span class="login-password-wrap">
           <input
             type="password"
             name="password"
+            placeholder="Password"
             autocomplete="current-password"
             data-password
           />
@@ -80,6 +82,7 @@
 
       <button class="btn primary login-submit" type="submit" data-submit>
         <span class="login-submit-label" data-submit-label>Sign in</span>
+        <span class="login-spinner" aria-hidden="true"></span>
       </button>
 
       <button class="login-forgot" type="button" data-forgot-start hidden>Forgot password?</button>
@@ -89,7 +92,7 @@
 
     <form class="login-form" data-reset-form hidden novalidate>
       <label class="login-field">
-        <span>Employee code or email</span>
+        <span>Email or Employee Code</span>
         <input
           type="text"
           name="identifier"

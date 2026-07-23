@@ -6,7 +6,6 @@ import { initPolicyRender } from "./policy-render.js";
 import { initReveal } from "./reveal.js";
 import { initState } from "./state.js";
 import { initAdmin } from "./admin.js";
-import { initThemes } from "./themes.js";
 import { initChatbot } from "./chatbot.js";
 
 const loadComponents = async () => {
@@ -39,6 +38,7 @@ const ADMIN_TAB_TITLES = {
   email: "Email",
   hrms: "HRMS Access",
   settings: "Settings",
+  branding: "Branding",
 };
 
 const applyInitialAdminState = () => {
@@ -48,6 +48,8 @@ const applyInitialAdminState = () => {
   if (target) target.classList.add("is-active");
   const titleEl = document.querySelector("[data-admin-title]");
   if (titleEl) titleEl.textContent = ADMIN_TAB_TITLES[requested] || "Manage organization";
+  // Pre-paint parity with activateTab: hide the shared head on the branding view.
+  document.body.classList.toggle("admin-branding", requested === "branding");
 };
 
 // Small "← All organizations" link tucked above the main content on an org's
@@ -135,8 +137,7 @@ const hydrateFooter = (page) => {
   if (!footer) return;
 
   const trustStrip = footer.querySelector('[data-slot="trust-strip"]');
-  const footerText = footer.querySelector('[data-slot="footer-text"]');
-  if (!trustStrip || !footerText) return;
+  if (!trustStrip) return;
 
   if (page === "policies" || page === "policy-admin") {
     // No footer on in-product pages — the trust badges and generic HR line
@@ -147,12 +148,12 @@ const hydrateFooter = (page) => {
 
   footer.removeAttribute("id");
   trustStrip.innerHTML = `
-    <span>GDPR-ready</span>
-    <span>SOC 2 aligned</span>
-    <span>ISO 27001 practices</span>
-    <span>Secure access logs</span>
+    <span>Privacy-ready foundation</span>
+    <span>SOC 2-minded controls</span>
+    <span>ISO 27001-inspired</span>
+    <span>Audit-friendly access logs</span>
+    <span class="footer-status"><i aria-hidden="true"></i> Secure by design</span>
   `;
-  footerText.innerHTML = "policies.zarohr &mdash; empowering compliant teams.";
 };
 
 const applyDashboardAccessMode = async (page, session) => {
@@ -189,7 +190,6 @@ const bootstrap = async () => {
   initReveal();
   initModules();
   initAdmin();
-  initThemes();
   if (page === "policies") {
     initChatbot();
   }

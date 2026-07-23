@@ -71,7 +71,7 @@ body[data-page="policies"] .policy-dashboard {
   transition: transform 220ms ease, box-shadow 220ms ease, background 220ms ease, filter 220ms ease;
 }
 
-.theme-btn {
+.branding-btn {
   bottom: 264px;
 }
 
@@ -921,7 +921,7 @@ body[data-page="policies"] .policy-dashboard {
   .people-admin-btn,
   .hrms-admin-btn { bottom: 124px; }
   .manage-modules-btn { bottom: 172px; }
-  .theme-btn { bottom: 220px; }
+  .branding-btn { bottom: 220px; }
 
   .theme-panel {
     left: 16px;

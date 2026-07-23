@@ -30,6 +30,7 @@ if (IS_PRODUCTION && (ROOT_HOST === "localhost" || ROOT_HOST.endsWith(".localhos
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash-lite";
 const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-001";
+const CHAT_CACHE_VERSION = "v2";
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 18000);
 const CHAT_ENABLE_QUERY_REWRITE = process.env.CHAT_ENABLE_QUERY_REWRITE === "true";
 const CHAT_DAILY_CAP_PER_ORG = Number(process.env.CHAT_DAILY_CAP_PER_ORG || 200);
@@ -284,7 +285,7 @@ app.use(async (req, res, next) => {
     try {
       const { data } = await supabase
         .from("companies")
-        .select("id, name, slug, access_mode")
+        .select("id, name, slug, access_mode, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
         .eq("slug", slug)
         .maybeSingle();
       if (data) req.company = data;
@@ -425,6 +426,16 @@ const sanitizeText = (value = "") => String(value).replace(/\s+/g, " ").trim();
 const sanitizeEmail = (value = "") => sanitizeText(value).toLowerCase();
 const sanitizeEmployeeCode = (value = "") => sanitizeText(value).toUpperCase();
 const sanitizeLoginIdentifier = (value = "") => sanitizeText(value).trim();
+const BRANDING_LIMITS = { logo: 1024 * 1024, background: 3 * 1024 * 1024 };
+const validateBrandingImage = (value, limit, label) => {
+  if (value == null || value === "") return "";
+  const raw = String(value);
+  const match = raw.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=]+)$/i);
+  if (!match) throw new Error(`${label} must be a PNG, JPG, or WebP image.`);
+  const bytes = Math.floor((match[2].length * 3) / 4);
+  if (bytes > limit) throw new Error(`${label} exceeds the ${Math.round(limit / 1024 / 1024)} MB limit.`);
+  return raw;
+};
 const isUuid = (value = "") =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
@@ -1769,7 +1780,7 @@ app.post("/api/admin/orgs/:id/select", requireSuperAdmin, async (req, res) => {
   const orgId = req.params.id;
   const { data: company, error } = await supabase
     .from("companies")
-    .select("id, name, slug, access_mode")
+    .select("id, name, slug, access_mode, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
     .eq("id", orgId)
     .maybeSingle();
   if (error) {
@@ -1981,7 +1992,8 @@ const lookupTokens = (value = "") => {
 const expandHrTerms = (value = "") => {
   const expansions = [
     [/\bpl\b|privilege leave|annual leave|earned leave|paid leave/g, " privilege leave pl annual leave entitlement time away"],
-    [/\bsl\b|sick|illness|ill|medical leave|casual leave|leave|absent|absence|attendance|holiday|vacation/g, " leave attendance holiday time away"],
+    [/\bsl\b|sick|illness|ill|medical leave|casual leave/g, " sick leave casual leave medical leave entitlement time away"],
+    [/\bleave|absent|absence|attendance|holiday|vacation\b/g, " leave attendance holiday time away"],
     [/work from home|wfh|remote work|remote|hybrid/g, " attendance employment work arrangement"],
     [/fire|safety|accident|hazard|emergency/g, " safety health fire accident"],
     [/salary|pay|wage|compensation|bonus|benefit|loan|gratuity|lta|pension/g, " pay compensation benefits salary"],
@@ -2244,6 +2256,27 @@ const entitlementTargetForQuestion = (question = "") => {
     return { type: "holiday", patterns: [/\bpublic holidays?\b/i, /\boptional holidays?\b/i, /\bholiday list\b/i] };
   }
   return null;
+};
+
+const expectedPolicyNamePatternsForQuestion = (question = "") => {
+  const q = normalizeLookup(question);
+  if (/\b(sl|sick|casual sick|casual leave|medical|leave|attendance)\b/.test(q)) {
+    return [/holidays?,?\s+leave\s+&?\s+attendance/i, /\bleave\s+&?\s+attendance/i];
+  }
+  if (/\bholiday|holidays\b/.test(q)) {
+    return [/\bholiday list\b/i, /holidays?,?\s+leave\s+&?\s+attendance/i];
+  }
+  if (/\bmaternity\b/.test(q)) return [/\bmaternity\b/i];
+  if (/\bpaternity\b/.test(q)) return [/\bpaternity\b/i];
+  return [];
+};
+
+const findExpectedPolicyAreas = (question, modules = []) => {
+  const patterns = expectedPolicyNamePatternsForQuestion(question);
+  if (!patterns.length) return [];
+  return modules
+    .flatMap((module) => (module.policies || []).map((policy) => ({ module, policy })))
+    .filter(({ policy }) => patterns.some((pattern) => pattern.test(policy.name)));
 };
 
 const answerSimpleEntitlementFromMatches = ({ question, matches = [] }) => {
@@ -3090,49 +3123,10 @@ app.post("/api/org/people", requireOrgManager, requireStandaloneEmployeeAccess, 
     byCode.set(sanitizeEmployeeCode(inserted.employee_code || ""), inserted);
   }
 
-  // In HRMS mode no email goes out — the HRMS owns the entry path.
-  if (isHrmsMode) {
-    return res.status(201).json(responseRows.map((row) => ({ ...row, email_sent: false })));
-  }
-
-  // Standalone mode: email newly-created employees their code + temporary
-  // password. Existing employees keep their current password.
-  const orgName = companyRow?.name || "Your organization";
-  const orgSlug = companyRow?.slug || "";
-  const emailedRows = await Promise.all(
-    responseRows.map(async (row) => {
-      if (!row.temporary_password) return row;
-      try {
-        await sendEmployeeCredentials({
-          companyId: req.orgCompanyId,
-          orgName,
-          orgSlug,
-          to: row.email,
-          name: row.name,
-          employeeCode: row.employee_code,
-          password: row.temporary_password,
-          req,
-        });
-        await supabase
-          .from("org_people")
-          .update({ invited_at: new Date().toISOString() })
-          .eq("id", row.id)
-          .eq("company_id", req.orgCompanyId);
-        return {
-          ...row,
-          email_sent: true,
-        };
-      } catch (emailError) {
-        console.error("Employee invite email failed:", emailError);
-        return {
-          ...row,
-          email_sent: false,
-          email_error: emailError.message || "Credentials email failed. SMTP may not be configured.",
-        };
-      }
-    })
-  );
-  return res.status(201).json(emailedRows);
+  // Creating a person only saves the record. Sending credentials is an
+  // explicit action (Invite / Resend invite) so admins can review the list
+  // before any email leaves the portal.
+  return res.status(201).json(responseRows.map((row) => ({ ...row, email_sent: false })));
 });
 
 app.patch("/api/org/people/:id", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
@@ -3466,11 +3460,18 @@ app.post("/api/org/people/invite-all", requireOrgManager, requireStandaloneEmplo
 // Org-level settings (currently just access_mode). Falls back to 'standalone'
 // if the access_mode column from schema.sql hasn't been applied yet.
 const VALID_ACCESS_MODES = new Set(["standalone", "hrms_link"]);
+const toBrandingPayload = (company = {}) => ({
+  theme_id: company?.theme_id || "default",
+  logo_url: company?.logo_url || "",
+  portal_name: company?.portal_name || company?.name || "",
+  login_background_color: company?.login_background_color || "",
+  login_background_image_url: company?.login_background_image_url || "",
+});
 
 app.get("/api/org/settings", requireOrgManager, async (req, res) => {
   const { data, error } = await supabase
     .from("companies")
-    .select("access_mode, slug")
+    .select("access_mode, slug, name, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
     .eq("id", req.orgCompanyId)
     .maybeSingle();
   if (error && !isMissingColumnError(error)) {
@@ -3480,6 +3481,7 @@ app.get("/api/org/settings", requireOrgManager, async (req, res) => {
   return res.json({
     access_mode: data?.access_mode || "standalone",
     login_url: data?.slug ? buildOrgLoginUrl(req, data.slug, "index.html#login") : null,
+    branding: toBrandingPayload(data),
   });
 });
 
@@ -3488,10 +3490,30 @@ app.patch("/api/org/settings", requireOrgManager, async (req, res) => {
   if (!VALID_ACCESS_MODES.has(mode)) {
     return res.status(400).send("Invalid access_mode.");
   }
-  const { error } = await supabase
+  const updates = { access_mode: mode };
+  if (req.body?.theme_id !== undefined) {
+    const allowedThemes = new Set(["default", "sky", "sand", "mint", "midnight", "carbon"]);
+    if (!allowedThemes.has(req.body.theme_id)) return res.status(400).send("Invalid theme.");
+    updates.theme_id = req.body.theme_id;
+  }
+  if (req.body?.portal_name !== undefined) updates.portal_name = sanitizeText(req.body.portal_name).slice(0, 80);
+  if (req.body?.login_background_color !== undefined) {
+    const color = sanitizeText(req.body.login_background_color);
+    if (color && !/^#[0-9a-f]{6}$/i.test(color)) return res.status(400).send("Invalid background color.");
+    updates.login_background_color = color || null;
+  }
+  try {
+    if (req.body?.logo_url !== undefined) updates.logo_url = validateBrandingImage(req.body.logo_url, BRANDING_LIMITS.logo, "Logo");
+    if (req.body?.login_background_image_url !== undefined) updates.login_background_image_url = validateBrandingImage(req.body.login_background_image_url, BRANDING_LIMITS.background, "Background image");
+  } catch (error) {
+    return res.status(400).send(error.message);
+  }
+  const { data, error } = await supabase
     .from("companies")
-    .update({ access_mode: mode })
-    .eq("id", req.orgCompanyId);
+    .update(updates)
+    .eq("id", req.orgCompanyId)
+    .select("access_mode, slug, name, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
+    .maybeSingle();
   if (error) {
     if (isMissingColumnError(error)) {
       return res
@@ -3501,7 +3523,17 @@ app.patch("/api/org/settings", requireOrgManager, async (req, res) => {
     console.error("Update settings failed:", error);
     return res.status(500).send(error.message || "Failed to update settings.");
   }
-  return res.json({ access_mode: mode });
+  if (req.session?.user?.selectedCompany?.id === req.orgCompanyId && data) {
+    req.session.user.selectedCompany = {
+      ...req.session.user.selectedCompany,
+      ...data,
+    };
+  }
+  return res.json({
+    access_mode: data?.access_mode || mode,
+    login_url: data?.slug ? buildOrgLoginUrl(req, data.slug, "index.html#login") : null,
+    branding: toBrandingPayload(data),
+  });
 });
 
 app.get("/api/org/hrms-launch-config", requireOrgManager, async (req, res) => {
@@ -4006,9 +4038,32 @@ app.delete("/api/admin/orgs/:id", requireSuperAdmin, async (req, res) => {
   return res.json({ ok: true });
 });
 
-app.get("/api/session", (req, res) => {
+app.get("/api/session", async (req, res) => {
   if (!req.session?.user) {
     return res.status(401).send("Not authenticated.");
+  }
+  // The portal theme is enforced org-wide, so every gated page needs it. On a
+  // subdomain it's already on req.company; on the root/localhost path we resolve
+  // it from the user's company (one indexed read per session check).
+  let branding = req.company
+    ? toBrandingPayload(req.company)
+    : req.session.user.selectedCompany?.theme_id !== undefined
+      ? toBrandingPayload(req.session.user.selectedCompany)
+      : null;
+  if (!branding) {
+    const companyId = req.session.user.companyId;
+    if (companyId) {
+      try {
+        const { data } = await supabase
+          .from("companies")
+          .select("name, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
+          .eq("id", companyId)
+          .maybeSingle();
+        branding = toBrandingPayload(data);
+      } catch (error) {
+        console.error("Session branding lookup failed:", error);
+      }
+    }
   }
   // Advertise the product root host so the client can build subdomain URLs
   // (login link, org tile links) without parsing window.location — which
@@ -4016,6 +4071,8 @@ app.get("/api/session", (req, res) => {
   // first label.
   return res.json({
     ...req.session.user,
+    theme_id: branding?.theme_id || "default",
+    branding: branding || toBrandingPayload(),
     rootHost: ROOT_HOST,
     rootPort: IS_PRODUCTION ? null : PORT,
     csrfToken: ensureCsrfToken(req),
@@ -4033,7 +4090,17 @@ app.get("/api/auth/context", (req, res) => {
     // hrms_only = the page should not offer email-login at all; the only
     // valid entry is a signed HRMS launch.
     mode: !req.company ? "password" : isHrmsOrg ? "hrms_only" : "standalone",
-    org: req.company ? { name: req.company.name, slug: req.company.slug } : null,
+    org: req.company ? {
+      name: req.company.name,
+      slug: req.company.slug,
+      branding: {
+        theme_id: req.company.theme_id || "default",
+        logo_url: req.company.logo_url || "",
+        portal_name: req.company.portal_name || req.company.name || "",
+        login_background_color: req.company.login_background_color || "",
+        login_background_image_url: req.company.login_background_image_url || "",
+      },
+    } : null,
   });
 });
 
@@ -4395,7 +4462,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       ? `${question}\nConversation context:\n${priorTurn.slice(0, 600)}`
       : question;
     const indexVersion = await getPolicyIndexVersion(req.orgCompanyId);
-    const questionHash = hashValue(normalizeLookup(questionForRetrieval));
+    const questionHash = hashValue(`${CHAT_CACHE_VERSION}:${normalizeLookup(questionForRetrieval)}`);
     const cached = await getCachedAnswer({
       companyId: req.orgCompanyId,
       questionHash,
@@ -4421,9 +4488,29 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
 
     const closestPolicyArea = findClosestPolicyArea(questionForRetrieval, modules);
     const closestPolicyAreas = findClosestPolicyAreas(questionForRetrieval, modules);
+    const expectedPolicyAreas = findExpectedPolicyAreas(question, modules);
+    if (expectedPolicyAreas.length) {
+      const statuses = await Promise.all(
+        expectedPolicyAreas.map(async (entry) => ({
+          ...entry,
+          status: await getPolicyDocumentStatus({ companyId: req.orgCompanyId, policyId: entry.policy.id }),
+        }))
+      );
+      const uploadedExpected = statuses.filter((entry) => entry.status === "uploaded");
+      if (!uploadedExpected.length) {
+        const first = statuses[0];
+        return res.json({
+          answer: `"${first.policy.name}" is configured in ${first.module.name}, but its document is not uploaded yet. Ask HR to upload it before Genie can answer this.`,
+          sources: [],
+          mode: "policy_document_missing",
+        });
+      }
+    }
     let focusedPolicyChunks = await fetchFocusedPolicyChunks({
       companyId: req.orgCompanyId,
-      policyAreas: closestPolicyAreas.length ? closestPolicyAreas : closestPolicyArea ? [closestPolicyArea] : [],
+      policyAreas: expectedPolicyAreas.length
+        ? expectedPolicyAreas.map((entry) => ({ ...entry, score: 1 }))
+        : closestPolicyAreas.length ? closestPolicyAreas : closestPolicyArea ? [closestPolicyArea] : [],
       question: questionForRetrieval,
       limit: 8,
     });

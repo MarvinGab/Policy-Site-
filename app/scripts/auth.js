@@ -7,6 +7,47 @@ export const initAuth = async () => {
   const loginForm = document.getElementById("login-form");
 
   let mode = "password"; // safe default
+
+  // Portal theme is org-controlled and enforced for every member (employees and
+  // admins alike) — there is no personal picker. Apply it and cache it per-host
+  // so theme-boot can paint it before the session round-trip on the next load.
+  const THEME_CACHE_KEY = "zarohr-theme:" + window.location.host;
+  const applyOrgTheme = (themeId) => {
+    const theme = themeId || "default";
+    window.__orgTheme = theme;
+    if (theme === "default") {
+      document.documentElement.removeAttribute("data-theme");
+      document.body.removeAttribute("data-theme");
+    } else {
+      document.documentElement.dataset.theme = theme;
+      document.body.dataset.theme = theme;
+    }
+    try {
+      if (theme === "default") localStorage.removeItem(THEME_CACHE_KEY);
+      else localStorage.setItem(THEME_CACHE_KEY, theme);
+    } catch { /* ignore storage errors */ }
+  };
+
+  const applyOrgBranding = (branding = {}) => {
+    applyOrgTheme(branding.theme_id);
+    if (branding.login_background_color) document.documentElement.style.setProperty("--org-login-bg", branding.login_background_color);
+    else document.documentElement.style.removeProperty("--org-login-bg");
+    if (branding.login_background_image_url) document.documentElement.style.setProperty("--org-login-bg-image", `url(${JSON.stringify(branding.login_background_image_url)})`);
+    else document.documentElement.style.removeProperty("--org-login-bg-image");
+    const logo = branding.logo_url;
+    document.querySelectorAll(".header-logo").forEach((image) => {
+      if (!image.dataset.defaultSrc) image.dataset.defaultSrc = image.getAttribute("src") || "";
+      image.src = logo || image.dataset.defaultSrc;
+    });
+    const portalName = branding.portal_name;
+    if (portalName) {
+      document.title = `${portalName} | Policy Portal`;
+    }
+    document.querySelectorAll("[data-portal-name]").forEach((nameEl) => {
+      if (!nameEl.dataset.defaultText) nameEl.dataset.defaultText = nameEl.textContent || "Policy Portal";
+      nameEl.textContent = portalName || nameEl.dataset.defaultText;
+    });
+  };
   if (loginSection) {
     loginSection.dataset.loginMode = "loading";
     try {
@@ -14,6 +55,7 @@ export const initAuth = async () => {
       if (ctx.ok) {
         const data = await ctx.json();
         if (["password", "magic", "standalone", "hrms_only"].includes(data.mode)) mode = data.mode;
+        applyOrgBranding(data.org?.branding || {});
       }
     } catch (err) {
       console.error("Auth context fetch failed; defaulting to password mode:", err);
@@ -25,24 +67,6 @@ export const initAuth = async () => {
       document.querySelector("[data-login-hrms]")?.removeAttribute("hidden");
       return { authenticated: false };
     }
-  }
-
-  // Calm setup-screen greeting rotation with separate exit/entry phases.
-  const welcomeEl = document.querySelector("[data-welcome]");
-  if (welcomeEl) {
-    const words = ["Welcome", "Bonjour", "Hola", "Ciao", "Olá", "こんにちは", "你好"];
-    let i = 0;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!reduceMotion) window.setInterval(() => {
-      welcomeEl.classList.remove("is-entering");
-      welcomeEl.classList.add("is-leaving");
-      setTimeout(() => {
-        i = (i + 1) % words.length;
-        welcomeEl.textContent = words[i];
-        welcomeEl.classList.remove("is-leaving");
-        welcomeEl.classList.add("is-entering");
-      }, 480);
-    }, 3400);
   }
 
   if (loginForm) {
@@ -199,7 +223,7 @@ export const initAuth = async () => {
       const identifier = String(formData.get("identifier") || "").trim();
       resetMessage.textContent = "";
       if (!identifier) {
-        resetMessage.textContent = "Enter your employee code or email.";
+        resetMessage.textContent = "Enter your Email or Employee Code.";
         return;
       }
       resetSend.disabled = true;
@@ -479,12 +503,12 @@ export const initAuth = async () => {
       }
       session = await response.json();
       if (session?.csrfToken) window.__csrfToken = session.csrfToken;
+      // Enforce the org theme on the gated employee/admin pages (orgs is the
+      // root product page, so it keeps the default theme).
+      if (page === "policies" || page === "policy-admin") applyOrgBranding(session.branding || { theme_id: session.theme_id });
       document.body.dataset.role = session.role || "employee";
       applyRoleAccess(session.role || "employee", page);
       window.dispatchEvent(new CustomEvent("role-ready", { detail: session }));
-      if (page === "policies") {
-        verifyOrgAccess();
-      }
     } catch (err) {
       console.error("Session check failed:", err);
       window.location.replace("index.html#login");
@@ -524,16 +548,4 @@ const applyRoleAccess = (role, page) => {
   if (page === "policy-admin" && !canManage) {
     window.location.replace("policies.html");
   }
-};
-
-const verifyOrgAccess = () => {
-  fetch("/api/org/access", { credentials: "include" })
-    .then((response) => {
-      if (response.status === 403 || response.status === 404) {
-        window.location.replace("index.html#login");
-      }
-    })
-    .catch((error) => {
-      console.error("Org access check failed:", error);
-    });
 };
