@@ -30,7 +30,7 @@ if (IS_PRODUCTION && (ROOT_HOST === "localhost" || ROOT_HOST.endsWith(".localhos
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash-lite";
 const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-001";
-const CHAT_CACHE_VERSION = "v3";
+const CHAT_CACHE_VERSION = "v4";
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 18000);
 const CHAT_ENABLE_QUERY_REWRITE = process.env.CHAT_ENABLE_QUERY_REWRITE === "true";
 const CHAT_DAILY_CAP_PER_ORG = Number(process.env.CHAT_DAILY_CAP_PER_ORG || 200);
@@ -2415,6 +2415,44 @@ const answerSimpleSanctionFromMatches = ({ question, matches = [] }) => {
   return cleanExtractedAnswer(answerParts.join(" "));
 };
 
+const answerCommitteeMembersFromMatches = ({ question, matches = [] }) => {
+  const asksMembers = /\b(who|whom|member|members|committee|ic|internal committee|sh ic|sh-ic)\b/i.test(question);
+  const asksPosh = /\b(posh|sexual harassment|harassment|ic|internal committee|committee|sh ic|sh-ic)\b/i.test(question);
+  if (!asksMembers || !asksPosh) return "";
+
+  const tableText = matches
+    .slice(0, 12)
+    .map((row) => row.chunk_text || "")
+    .find((text) => /\bmembers of\s+(sh-?ic|internal committee)\b/i.test(text) || /\brole in ic\b/i.test(text));
+  if (!tableText) return "";
+
+  const rows = [];
+  const normalized = tableText.replace(/\s+/g, " ");
+  const rowPattern =
+    /(?:^|\s)(\d{1,2})\s+(.+?)\s+(Presiding Officer\s*\(Chairperson\)|Internal Member|External Member)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\s+(\+91\s*\d{10}|\d{10})\b/gi;
+  let match;
+  while ((match = rowPattern.exec(normalized))) {
+    const prefix = cleanExtractedAnswer(match[2]).replace(
+      /\s+(Front Desk Exe\.?|Accountant|Sr\.?\s+Engineer|Jr\.?\s+Engineer|Site Supervisor|External POSH Expert|External Expert|POSH Expert|Manager|HR|Executive|Officer)$/i,
+      ""
+    );
+    const name =
+      prefix.match(/^([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})\b/)?.[1] ||
+      prefix;
+    rows.push({
+      name,
+      role: cleanExtractedAnswer(match[3]),
+      email: match[4],
+      phone: cleanExtractedAnswer(match[5]),
+    });
+  }
+  if (!rows.length) return "";
+  return rows
+    .slice(0, 8)
+    .map((row) => `${row.name} - ${row.role} (${row.email}, ${row.phone})`)
+    .join("\n");
+};
+
 const isLikelyTableOfContentsLine = (sentence = "") => {
   const text = String(sentence || "");
   const numberedHeadings = (text.match(/\b\d+(\.\d+)?\s+[A-Z][A-Za-z/& -]{2,}/g) || []).length;
@@ -4678,6 +4716,14 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         answer: directSanctionAnswer,
         sources: filtered,
         mode: "policy_sanction_extract",
+      });
+    }
+    const directCommitteeMembersAnswer = answerCommitteeMembersFromMatches({ question, matches: filtered });
+    if (directCommitteeMembersAnswer) {
+      return res.json({
+        answer: directCommitteeMembersAnswer,
+        sources: filtered,
+        mode: "policy_committee_members_extract",
       });
     }
     const directPolicySentenceAnswer = answerFromPolicySentences({
