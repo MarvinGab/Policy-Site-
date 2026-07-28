@@ -395,6 +395,32 @@ alter table org_hrms_settings
   add column if not exists last_rotated_at timestamptz,
   add column if not exists updated_at timestamptz not null default now();
 
+-- Spent HRMS launch nonces. Every signed launch URL carries a random `jti`;
+-- the verifier inserts it here on first use, and the primary key makes any
+-- replay fail. This is what stops a launch URL from working for whoever an
+-- employee forwards it to — the link dies the moment their own browser
+-- lands on it.
+--
+-- Only the SHA-256 of the jti is stored: the table is then useless to anyone
+-- who reads it, since a stored hash cannot be replayed as a URL parameter.
+create table if not exists hrms_launch_nonces (
+  jti text primary key,
+  company_id uuid references companies(id) on delete cascade,
+  -- Mirrors the launch's own exp. Rows are only useful until then: past that
+  -- the expiry check rejects the URL anyway, so they can be swept.
+  expires_at timestamptz not null,
+  used_at timestamptz not null default now()
+);
+
+create index if not exists hrms_launch_nonces_expires_idx on hrms_launch_nonces(expires_at);
+
+-- Housekeeping. Safe to call any time; nothing depends on expired rows.
+create or replace function prune_hrms_launch_nonces()
+returns void
+language sql as $$
+  delete from hrms_launch_nonces where expires_at < now() - interval '1 hour';
+$$;
+
 -- ============================================================================
 -- pgvector similarity helper used by /api/chat.
 -- ============================================================================

@@ -37,6 +37,11 @@ const CHAT_DAILY_CAP_PER_ORG = Number(process.env.CHAT_DAILY_CAP_PER_ORG || 200)
 const CHAT_CACHE_TTL_MS = Number(process.env.CHAT_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
 const SESSION_STORE = (process.env.SESSION_STORE || (IS_PRODUCTION ? "supabase" : "file")).toLowerCase();
 const HRMS_LAUNCH_SECRET = process.env.HRMS_LAUNCH_SECRET || (IS_PRODUCTION ? "" : SESSION_SECRET);
+// Lifetime of a session created by a signed HRMS launch. Deliberately far
+// shorter than the 30-day standalone cookie: re-entry costs one click on the
+// HRMS tile, so a long-lived cookie buys the user nothing and only widens the
+// window for a copied one. 8 hours ≈ one working day.
+const HRMS_SESSION_MAX_AGE_MS = Number(process.env.HRMS_SESSION_MAX_AGE_MS || 8 * 60 * 60 * 1000);
 // Comma-separated parent origins permitted to iframe this app — e.g.
 // "https://hrms.acme.com,https://app.workday.com". When set, the session
 // cookie is issued as SameSite=None (required for cross-site iframes) and a
@@ -225,9 +230,59 @@ app.use(
   })
 );
 
-// Rotate the session identifier whenever authentication succeeds. This prevents
-// a pre-authentication session cookie from being reused after login.
+// Thrown when a login route tries to mint a session for an org that has
+// delegated sign-in to its HRMS. Carries a status so handlers can surface it
+// verbatim instead of a 500.
+class HrmsOnlyOrgError extends Error {
+  constructor() {
+    super("This organization signs in through your HRMS. Open the policy portal from there.");
+    this.name = "HrmsOnlyOrgError";
+    this.status = 403;
+  }
+}
+
+/**
+ * Single chokepoint for creating a session.
+ *
+ * Two jobs:
+ *
+ * 1. Rotate the session id on every successful auth, so a pre-auth cookie
+ *    can't be reused afterwards.
+ *
+ * 2. Enforce that an org in `hrms_link` mode can ONLY be entered through the
+ *    signed launch. Every login path funnels through here — password login,
+ *    magic link, and anything added later — so the rule holds by default
+ *    instead of depending on each handler remembering its own check. Before
+ *    this, the protection was several separate `if`s and a new auth route
+ *    would have defaulted to *open*.
+ *
+ * STANDALONE ORGS ARE UNAFFECTED. The lookup below only rejects when
+ * access_mode is explicitly `hrms_link`; for a standalone customer buying
+ * the policy portal on its own, passwords, invites, OTP reset and magic
+ * links behave exactly as they did before. The same applies if an org is
+ * switched back to standalone later — nothing here is destructive, so its
+ * existing credentials simply start working again.
+ */
 const establishAuthenticatedSession = async (req, user) => {
+  // Super admin carries no companyId and is deliberately exempt: someone has
+  // to be able to administer an org regardless of its access mode.
+  if (user?.companyId && user.authSource !== "hrms") {
+    const { data, error } = await supabase
+      .from("companies")
+      .select("access_mode")
+      .eq("id", user.companyId)
+      .maybeSingle();
+    // Fail closed on a lookup error: better to refuse a login we can't
+    // classify than to hand out a session that might bypass the HRMS.
+    if (error) {
+      console.error("Access-mode check failed during login:", error);
+      throw new HrmsOnlyOrgError();
+    }
+    if ((data?.access_mode || "standalone") === "hrms_link") {
+      throw new HrmsOnlyOrgError();
+    }
+  }
+
   await new Promise((resolve, reject) => req.session.regenerate((error) => (error ? reject(error) : resolve())));
   req.session.user = user;
 };
@@ -882,7 +937,7 @@ const getRootBaseUrl = (req) => `${getAppProtocol(req)}://${ROOT_HOST}${IS_PRODU
 // URL-encoded before joining so that a value can't inject a delimiter or a
 // key=value pair to shift boundaries (e.g. `name = "Bob\nrole=admin"`).
 // Order is fixed and every field appears exactly once.
-const buildHrmsCanonicalPayload = ({ org, email, exp, name = "", role = "employee", externalId = "" }) => {
+const buildHrmsCanonicalPayload = ({ org, email, exp, name = "", role = "employee", externalId = "", jti = "" }) => {
   const safeRole = role === "admin" ? "admin" : "employee";
   return [
     `org=${encodeURIComponent(slugify(org))}`,
@@ -891,7 +946,28 @@ const buildHrmsCanonicalPayload = ({ org, email, exp, name = "", role = "employe
     `name=${encodeURIComponent(sanitizeText(name || ""))}`,
     `role=${encodeURIComponent(safeRole)}`,
     `external_id=${encodeURIComponent(sanitizeText(externalId || ""))}`,
+    // Single-use nonce. Burned on first use (see hrms_launch_nonces), which
+    // is what stops a launch URL from working for whoever it's forwarded to.
+    `jti=${encodeURIComponent(sanitizeText(jti || ""))}`,
   ].join("\n");
+};
+
+// Claim a launch nonce. Returns true only for the FIRST caller: the primary
+// key on jti makes the insert fail for any replay, so this is atomic without
+// a transaction. A launch URL therefore works exactly once, no matter how
+// many people end up holding it.
+const consumeHrmsLaunchNonce = async ({ jti, companyId, expiresAt }) => {
+  const { error } = await supabase.from("hrms_launch_nonces").insert({
+    jti: hashValue(jti),
+    company_id: companyId,
+    expires_at: new Date(expiresAt * 1000).toISOString(),
+  });
+  if (!error) return true;
+  // 23505 = unique_violation -> already used. Anything else is a real fault,
+  // and we fail closed rather than letting an unverifiable launch through.
+  if (error.code === "23505") return false;
+  console.error("HRMS launch nonce insert failed:", error);
+  throw error;
 };
 
 // Coerce a query-string field to a single scalar. If Express handed us an
@@ -943,6 +1019,10 @@ const getHrmsSecretForCompany = async (companyId) => {
 
 const buildHrmsLaunchTemplate = ({ req, company, secret }) => {
   const exp = Math.floor(Date.now() / 1000) + 300;
+  // A sample nonce. Real launches must send a fresh random one per link —
+  // it is single-use, so replaying this literal template twice fails the
+  // second time by design.
+  const jti = crypto.randomBytes(16).toString("base64url");
   const canonical = buildHrmsCanonicalPayload({
     org: company.slug,
     email: "employee@example.com",
@@ -950,6 +1030,7 @@ const buildHrmsLaunchTemplate = ({ req, company, secret }) => {
     role: "employee",
     exp,
     externalId: "EMP001",
+    jti,
   });
   const sig = secret ? signHrmsLaunch(canonical, secret) : "CONFIGURE_LAUNCH_SECRET";
   const params = new URLSearchParams({
@@ -959,6 +1040,7 @@ const buildHrmsLaunchTemplate = ({ req, company, secret }) => {
     role: "employee",
     exp: String(exp),
     external_id: "EMP001",
+    jti,
     sig,
   });
   return `${getRootBaseUrl(req)}/api/hrms/launch?${params.toString()}`;
@@ -1366,17 +1448,27 @@ app.post("/api/login", loginLimiter, async (req, res) => {
           });
         }
         const co = personRow.companies || req.company;
-        await establishAuthenticatedSession(req, {
-          id: personRow.id,
-          email: personRow.email,
-          employeeCode: personRow.employee_code || null,
-          name: personRow.name || personRow.email,
-          role: personRow.role === "admin" ? "admin" : "employee",
-          companyId: personRow.company_id,
-          selectedCompany: { id: co.id, name: co.name, slug: co.slug },
-          authSource: "password",
-          mustResetPassword: personRow.must_reset_password === true,
-        });
+        try {
+          await establishAuthenticatedSession(req, {
+            id: personRow.id,
+            email: personRow.email,
+            employeeCode: personRow.employee_code || null,
+            name: personRow.name || personRow.email,
+            role: personRow.role === "admin" ? "admin" : "employee",
+            companyId: personRow.company_id,
+            selectedCompany: { id: co.id, name: co.name, slug: co.slug },
+            authSource: "password",
+            mustResetPassword: personRow.must_reset_password === true,
+          });
+        } catch (error) {
+          // Backstop. The handler already 403s on hrms_link above, so this
+          // only fires if that check is ever removed — which is exactly the
+          // regression the central guard exists to survive.
+          if (error instanceof HrmsOnlyOrgError) {
+            return res.status(error.status).send(error.message);
+          }
+          throw error;
+        }
         if (remember === false) {
           req.session.cookie.expires = false;
           req.session.cookie.maxAge = null;
@@ -1650,15 +1742,22 @@ app.get("/auth/link", async (req, res) => {
     .update({ used_at: new Date().toISOString() })
     .eq("token", token);
 
-  await establishAuthenticatedSession(req, {
-    id: person.id,
-    email: person.email,
-    name: person.name || person.email,
-    role: person.role === "admin" ? "admin" : "employee",
-    companyId: company.id,
-    selectedCompany: company,
-    authSource: "magic_link",
-  });
+  try {
+    await establishAuthenticatedSession(req, {
+      id: person.id,
+      email: person.email,
+      name: person.name || person.email,
+      role: person.role === "admin" ? "admin" : "employee",
+      companyId: company.id,
+      selectedCompany: company,
+      authSource: "magic_link",
+    });
+  } catch (error) {
+    // Org has moved to HRMS sign-in since this link was issued. Bounce to the
+    // org login page, which renders the "sign in through your HRMS" message.
+    if (error instanceof HrmsOnlyOrgError) return failTo(slug, "hrms_only");
+    throw error;
+  }
 
   const redirectPath = person.role === "admin" ? "/policy-admin.html" : "/policies.html";
   // Always land on the org subdomain for the dashboard.
@@ -3687,12 +3786,14 @@ app.post("/api/hrms/test", loginLimiter, async (req, res) => {
   const name = sanitizeText(req.body?.name || "");
   const role = req.body?.role === "admin" ? "admin" : "employee";
   const externalId = sanitizeText(req.body?.external_id || "");
+  const jti = sanitizeText(req.body?.jti || "");
   const exp = Number(req.body?.exp || 0);
   const sig = String(req.body?.sig || "").trim();
   const now = Math.floor(Date.now() / 1000);
 
   if (!org) reasons.push("missing/invalid org");
   if (!email) reasons.push("missing/invalid email");
+  if (!jti) reasons.push("missing jti (single-use nonce)");
   if (!exp) reasons.push("missing exp");
   else if (exp < now) reasons.push(`exp is in the past (server time ${now}, exp ${exp})`);
   else if (exp > now + 60 * 15) reasons.push(`exp is more than 15 min from now (server time ${now}, exp ${exp})`);
@@ -3722,7 +3823,7 @@ app.post("/api/hrms/test", loginLimiter, async (req, res) => {
     }
   }
 
-  const canonical = buildHrmsCanonicalPayload({ org, email, name, role, exp, externalId });
+  const canonical = buildHrmsCanonicalPayload({ org, email, name, role, exp, externalId, jti });
   expected = secret ? signHrmsLaunch(canonical, secret) : "";
   if (sig && expected && !safeEqualHex(sig, expected)) {
     reasons.push("signature mismatch — check your secret and canonical string");
@@ -3749,8 +3850,9 @@ app.get("/api/hrms/launch", async (req, res) => {
   const roleRaw = singleQueryParam(req.query.role);
   const externalIdRaw = singleQueryParam(req.query.external_id);
   const expRaw = singleQueryParam(req.query.exp);
+  const jtiRaw = singleQueryParam(req.query.jti);
   const sigRaw = singleQueryParam(req.query.sig);
-  if ([orgRaw, emailRaw, nameRaw, roleRaw, externalIdRaw, expRaw, sigRaw].some((v) => v === null)) {
+  if ([orgRaw, emailRaw, nameRaw, roleRaw, externalIdRaw, expRaw, jtiRaw, sigRaw].some((v) => v === null)) {
     return res.status(400).send("Duplicate HRMS launch parameters.");
   }
 
@@ -3761,11 +3863,12 @@ app.get("/api/hrms/launch", async (req, res) => {
   // let a compromised HRMS mint a god account on our platform.
   const role = roleRaw === "admin" ? "admin" : "employee";
   const externalId = sanitizeText(externalIdRaw);
+  const jti = sanitizeText(jtiRaw);
   const exp = Number(expRaw || 0);
   const sig = sigRaw.trim();
   const now = Math.floor(Date.now() / 1000);
 
-  if (!org || !email || !exp || !sig) {
+  if (!org || !email || !exp || !sig || !jti) {
     return res.status(400).send("Missing HRMS launch parameters.");
   }
   if (exp < now) {
@@ -3798,10 +3901,24 @@ app.get("/api/hrms/launch", async (req, res) => {
     res.setHeader("Content-Security-Policy", `frame-ancestors 'self' ${allowedOrigin}`);
   }
 
-  const canonical = buildHrmsCanonicalPayload({ org, email, name, role, exp, externalId });
+  const canonical = buildHrmsCanonicalPayload({ org, email, name, role, exp, externalId, jti });
   const expected = signHrmsLaunch(canonical, secret);
   if (!safeEqualHex(sig, expected)) {
     return res.status(401).send("Invalid HRMS launch signature.");
+  }
+
+  // Burn the nonce AFTER the signature checks out, so an unauthenticated
+  // caller can't spend a legitimate user's nonce by guessing jtis.
+  let fresh;
+  try {
+    fresh = await consumeHrmsLaunchNonce({ jti, companyId: company.id, expiresAt: exp });
+  } catch {
+    return res.status(500).send("Unable to verify this launch link. Try again from your HRMS.");
+  }
+  if (!fresh) {
+    return res
+      .status(401)
+      .send("This launch link has already been used. Open the policy portal from your HRMS again.");
   }
 
   await establishAuthenticatedSession(req, {
@@ -3815,6 +3932,15 @@ app.get("/api/hrms/launch", async (req, res) => {
     selectedCompany: company,
   });
   req.session.user.selectedCompany = company;
+
+  // HRMS sessions expire far sooner than the 30-day standalone default. The
+  // long default exists so password users aren't retyping credentials — but
+  // an HRMS user re-enters with a single click on their dashboard tile, so
+  // there is no friction to avoid. Shortening it cuts the window in which a
+  // copied session cookie is worth anything from a month to a shift.
+  //
+  // Standalone sessions are untouched: this only runs in the launch handler.
+  req.session.cookie.maxAge = HRMS_SESSION_MAX_AGE_MS;
 
   return res.redirect(303, "/policies.html");
 });

@@ -91,3 +91,146 @@
   opacity: 1;
   filter: none;
 }
+
+/* ── Rail states: loading / empty / error ──────────────────────────────────
+   One centred surface for every non-content state on the policy dashboard.
+   The mark is a stack of policy sheets — the material this product is made
+   of — rather than a generic warning glyph, and only its tint changes
+   between states so the copy stays the thing that carries meaning. */
+
+.rail-state {
+  /* The rail container is flex in some layouts and grid in others, so claim
+     the full row both ways — with only grid-column set, a flex parent lets
+     the block shrink to its content and sit hard against the left edge. */
+  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 14px;
+  /* Sits in the optical centre of the dashboard area rather than clinging
+     to the top of an otherwise empty page. */
+  min-height: min(58vh, 460px);
+  padding: 48px 24px;
+}
+
+.rail-state__mark {
+  width: 68px;
+  height: 68px;
+  margin-bottom: 4px;
+  /* Lifts the stack off a background that is itself near-white. */
+  filter: drop-shadow(0 6px 14px rgba(28, 36, 56, 0.1));
+}
+
+.rail-state__sheet {
+  fill: #fff;
+  stroke: rgba(28, 36, 56, 0.3);
+  stroke-width: 1.5;
+}
+
+/* Back sheets sit behind and lighter, so the stack reads as depth without
+   an explicit shadow on each one. */
+.rail-state__sheet--back { opacity: 0.4; }
+.rail-state__sheet--mid { opacity: 0.65; }
+
+.rail-state__rule {
+  stroke: rgba(28, 36, 56, 0.28);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.rail-state__title {
+  margin: 0;
+  font-family: "Satoshi", "Inter", system-ui, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.rail-state__body {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.rail-state__action {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid transparent;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.rail-state__action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(var(--accent-rgb), 0.28);
+}
+
+.rail-state__action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ── Tones ── */
+
+.rail-state--error .rail-state__rule {
+  stroke: rgba(167, 68, 68, 0.5);
+}
+
+.rail-state--error .rail-state__sheet--front {
+  stroke: rgba(167, 68, 68, 0.4);
+}
+
+.rail-state--error .rail-state__title {
+  color: var(--danger);
+}
+
+/* Loading: the sheets breathe rather than spin — a spinner would imply a
+   longer wait than a cached rail usually takes. */
+.rail-state--loading .rail-state__mark {
+  animation: rail-state-breathe 1.6s ease-in-out infinite;
+}
+
+.rail-state--loading .rail-state__title {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+@keyframes rail-state-breathe {
+  0%, 100% { opacity: 0.55; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-state--loading .rail-state__mark { animation: none; opacity: 0.7; }
+  .rail-state__action { transition: none; }
+  .rail-state__action:hover { transform: none; }
+}
+
+/* With no org resolved, every floating admin shortcut would fail the same
+   way the rail just did. Hide them so the state block carries the one
+   next step instead of five dead buttons. */
+body[data-rail-state="error"] .add-policy-btn {
+  display: none;
+}
+
+@media (max-width: 620px) {
+  .rail-state {
+    min-height: 42vh;
+    padding: 36px 18px;
+  }
+  .rail-state__title { font-size: 1.05rem; }
+}

@@ -16,6 +16,62 @@ const ICON_BY_SLUG = {
 // switching orgs doesn't show the wrong cache.
 const RAIL_CACHE_KEY = `rail:${typeof window !== "undefined" ? window.location.hostname : ""}`;
 
+// ─── Rail states (loading / empty / error) ──────────────────────────────
+//
+// One centred block for every non-content state, so an empty shelf and a
+// failed fetch read as the same considered surface rather than a stray line
+// of text. The mark is a stack of policy sheets — the thing this product is
+// actually made of — tinted per state instead of a generic warning glyph.
+
+const SHEETS_MARK = `
+  <svg class="rail-state__mark" viewBox="0 0 56 56" aria-hidden="true">
+    <rect class="rail-state__sheet rail-state__sheet--back" x="12" y="6" width="30" height="38" rx="3" />
+    <rect class="rail-state__sheet rail-state__sheet--mid" x="9" y="10" width="34" height="38" rx="3" />
+    <rect class="rail-state__sheet rail-state__sheet--front" x="6" y="14" width="38" height="36" rx="3" />
+    <line class="rail-state__rule" x1="13" y1="24" x2="33" y2="24" />
+    <line class="rail-state__rule" x1="13" y1="31" x2="37" y2="31" />
+    <line class="rail-state__rule" x1="13" y1="38" x2="28" y2="38" />
+  </svg>`;
+
+// `tone` drives colour only; the copy carries the meaning.
+const railState = ({ tone = "idle", title, body = "", action = null }) => `
+  <div class="rail-state rail-state--${tone}" role="status">
+    ${SHEETS_MARK}
+    <p class="rail-state__title">${escapeHtml(title)}</p>
+    ${body ? `<p class="rail-state__body">${escapeHtml(body)}</p>` : ""}
+    ${
+      action
+        ? `<a class="rail-state__action" href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>`
+        : ""
+    }
+  </div>`;
+
+/**
+ * Turn a fetch failure into something the reader can act on.
+ *
+ * The server's own wording is written for an API caller ("Organization
+ * context is required."), which tells a person nothing about what to do.
+ * The one case worth naming is a missing org: it is the difference between
+ * "something broke" and "you opened this page without picking an org yet".
+ */
+const errorState = (message) => {
+  if (/organization context/i.test(message)) {
+    return railState({
+      tone: "idle",
+      title: "Pick an organisation to continue",
+      body: "This page shows one organisation's policies at a time, and none is selected. Open the portal from your HRMS, or choose one below.",
+      action: { href: "/orgs.html", label: "Choose an organisation" },
+    });
+  }
+  return railState({
+    tone: "error",
+    title: "Policies didn't load",
+    body: message
+      ? `${message} Refresh to try again.`
+      : "Refresh to try again. If it keeps happening, contact your HR team.",
+  });
+};
+
 export const initPolicyRender = () => {
   if (document.body?.dataset.page !== "policies") return;
 
@@ -39,7 +95,10 @@ export const initPolicyRender = () => {
   }
 
   if (!renderedFromCache) {
-    container.innerHTML = `<div class="policy-rail-loading">Loading…</div>`;
+    container.innerHTML = railState({
+      tone: "loading",
+      title: "Loading policies",
+    });
   }
 
   // The org context comes from the subdomain — the server resolves it from
@@ -77,9 +136,11 @@ export const initPolicyRender = () => {
     .catch((error) => {
       console.error("Policy fetch failed:", error);
       if (!renderedFromCache) {
-        container.innerHTML = `<div class="policy-rail-loading">Couldn't load policies. ${escapeHtml(
-          error.message || ""
-        )}</div>`;
+        container.innerHTML = errorState(error.message || "");
+        // The floating admin shortcuts all need an org context too, so on a
+        // no-org error they would every one of them fail the same way. Hide
+        // them and let the state block carry the single next step.
+        document.body.dataset.railState = "error";
       }
     });
 };
@@ -94,7 +155,14 @@ const renderRail = (container, data) => {
 
 const buildPolicyRail = (modules) => {
   if (!modules.length) {
-    return `<div class="policy-rail-loading">No modules yet for this organization.</div>`;
+    // An empty shelf is an invitation, not a dead end — but only admins can
+    // act on it, so the action is gated by the same attribute the header
+    // shortcuts use rather than dangling a link employees can't follow.
+    return railState({
+      tone: "idle",
+      title: "No policies published yet",
+      body: "Once your HR team adds policy documents, they'll appear here grouped by topic.",
+    });
   }
 
   const moduleItems = modules
