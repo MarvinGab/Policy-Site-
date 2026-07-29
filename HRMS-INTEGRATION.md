@@ -57,22 +57,39 @@ GET https://policies.zarohr.com/api/hrms/launch
   &role=employee|admin
   &external_id=<optional HRMS user id>
   &exp=<unix-seconds, max 15 min in the future>
+  &jti=<fresh random single-use token>
   &sig=<hex HMAC-SHA256>
 ```
 
 ### Canonical signing string
 
-Concatenate the fields with `\n` (newline) in this order, omitting any field
-that wasn't provided:
+Join these **seven lines with `\n`**, in this **exact order**, every time —
+none of them is ever omitted, even when the value is empty:
 
 ```
 org=<slug>
 email=<email>
-name=<name>          // omit line if empty
-role=<role>
-external_id=<id>     // omit line if empty
 exp=<exp>
+name=<name>            // present but empty if not supplied
+role=<role>
+external_id=<id>       // present but empty if not supplied
+jti=<jti>
 ```
+
+Each value is individually run through `encodeURIComponent` before being
+placed into its `key=value` line. This is not the six-field, differently-
+ordered scheme this document previously showed — that scheme signed
+`org, email, name, role, external_id, exp` and omitted absent fields
+entirely, and never included `jti` at all. A signature built that way never
+matches what the server verifies (`buildHrmsCanonicalPayload` in
+`server/index.js`), so every launch built against the old example would fail
+with a `401` signature mismatch.
+
+`jti` is a single-use nonce: generate a fresh, unpredictable token (a UUID or
+a random base64url string of at least 16 bytes) for every launch. The server
+records it the first time it's spent; reusing the same launch URL — by the
+same person or anyone who received a forwarded copy — fails with `401` even
+though the signature is still valid.
 
 `sig = HMAC_SHA256(HRMS_LAUNCH_SECRET, canonical).hex`
 
@@ -81,19 +98,30 @@ exp=<exp>
 ```js
 import crypto from "crypto";
 
+function buildCanonical({ org, email, exp, name = "", role = "employee", externalId = "", jti }) {
+  const safeRole = role === "admin" ? "admin" : "employee";
+  return [
+    `org=${encodeURIComponent(org)}`,
+    `email=${encodeURIComponent(email.trim().toLowerCase())}`,
+    `exp=${encodeURIComponent(String(exp))}`,
+    `name=${encodeURIComponent(name.trim())}`,
+    `role=${encodeURIComponent(safeRole)}`,
+    `external_id=${encodeURIComponent(externalId.trim())}`,
+    `jti=${encodeURIComponent(jti)}`,
+  ].join("\n");
+}
+
 const params = {
   org: "acme",
   email: "rita@acme.com",
   name: "Rita Choksi",
   role: "employee",
-  external_id: "EMP-441",
-  exp: Math.floor(Date.now() / 1000) + 5 * 60, // 5 minutes from now
+  externalId: "EMP-441",
+  exp: Math.floor(Date.now() / 1000) + 5 * 60, // 5 minutes from now (max 15)
+  jti: crypto.randomBytes(16).toString("base64url"), // fresh every launch
 };
 
-const canonical = Object.entries(params)
-  .filter(([_, v]) => v !== "" && v != null)
-  .map(([k, v]) => `${k}=${v}`)
-  .join("\n");
+const canonical = buildCanonical(params);
 
 const sig = crypto
   .createHmac("sha256", process.env.HRMS_LAUNCH_SECRET)
@@ -101,7 +129,13 @@ const sig = crypto
   .digest("hex");
 
 const url = new URL("https://policies.zarohr.com/api/hrms/launch");
-Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+url.searchParams.set("org", params.org);
+url.searchParams.set("email", params.email);
+url.searchParams.set("name", params.name);
+url.searchParams.set("role", params.role);
+url.searchParams.set("external_id", params.externalId);
+url.searchParams.set("exp", String(params.exp));
+url.searchParams.set("jti", params.jti);
 url.searchParams.set("sig", sig);
 ```
 
@@ -136,11 +170,11 @@ direct-login ones in audit logs.
 
 | Status | Meaning |
 |--------|---------|
-| 400 | Missing required params, malformed exp, or exp too far in the future |
-| 401 | Signature mismatch or expired exp |
-| 403 | Org is not in `hrms_link` mode |
+| 400 | Missing required params (including `jti`), malformed exp, or exp too far in the future |
+| 401 | Signature mismatch, expired exp, or this `jti` was already used (single-use nonce) |
+| 403 | Org is not in `hrms_link` mode, or its HRMS settings aren't enabled |
 | 404 | Unknown org slug |
-| 500 | `HRMS_LAUNCH_SECRET` is empty on the server |
+| 500 | `HRMS_LAUNCH_SECRET`/org launch secret is empty on the server, or the nonce couldn't be recorded |
 
 ---
 
