@@ -30,7 +30,7 @@ if (IS_PRODUCTION && (ROOT_HOST === "localhost" || ROOT_HOST.endsWith(".localhos
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash-lite";
 const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-001";
-const CHAT_CACHE_VERSION = "v2";
+const CHAT_CACHE_VERSION = "v4";
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 18000);
 const CHAT_ENABLE_QUERY_REWRITE = process.env.CHAT_ENABLE_QUERY_REWRITE === "true";
 const CHAT_DAILY_CAP_PER_ORG = Number(process.env.CHAT_DAILY_CAP_PER_ORG || 200);
@@ -2273,6 +2273,106 @@ const scorePolicyChunkForQuestion = (chunkText = "", question = "") => {
   }, 0);
 };
 
+const EVIDENCE_STOP_TOKENS = new Set([
+  "about",
+  "answer",
+  "asked",
+  "could",
+  "give",
+  "hello",
+  "help",
+  "how",
+  "many",
+  "much",
+  "need",
+  "please",
+  "question",
+  "tell",
+  "their",
+  "they",
+  "was",
+  "who",
+  "why",
+  "would",
+]);
+
+const textContainsTerm = (text = "", term = "") => {
+  const normalizedText = normalizeLookup(text);
+  const normalizedTerm = normalizeLookup(term);
+  if (!normalizedText || !normalizedTerm) return false;
+  if (normalizedTerm.length <= 3) {
+    return new RegExp(`\\b${normalizedTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(normalizedText);
+  }
+  return normalizedText.includes(normalizedTerm);
+};
+
+const evidenceTokensForQuestion = (question = "") =>
+  baseLookupTokens(question).filter((token) => !EVIDENCE_STOP_TOKENS.has(token));
+
+const conceptGroupsForQuestion = (question = "") => {
+  const q = normalizeLookup(question);
+  const groups = [];
+  if (/\b(posh|sexual harassment|harassment|internal committee|committee|community|ic)\b/.test(q)) {
+    groups.push(["posh", "sexual harassment", "harassment", "internal committee", "committee", "ic"]);
+  }
+  if (/\b(sl|sick|illness|medical|casual sick)\b/.test(q)) {
+    groups.push(["sick", "sick leave", "sl", "medical leave", "illness", "casual sick"]);
+  }
+  if (/\b(pl|privilege|annual|earned)\b/.test(q)) {
+    groups.push(["privilege", "privilege leave", "pl", "annual leave", "earned leave"]);
+  }
+  if (/\b(comp off|comp-off|compensatory|compensatory off)\b/.test(q)) {
+    groups.push(["comp off", "comp-off", "compensatory", "compensatory off"]);
+  }
+  if (/\b(late|punch|punching|attendance|remark)\b/.test(q)) {
+    groups.push(["late", "late remark", "punch", "punch in", "punch-in", "attendance"]);
+  }
+  if (/\b(holiday|holidays|festival|public holiday|optional holiday)\b/.test(q)) {
+    groups.push(["holiday", "holidays", "public holiday", "optional holiday", "festival"]);
+  }
+  return groups;
+};
+
+const scoreMatchEvidence = ({ match, question, intent = "unknown" }) => {
+  const text = match?.chunk_text || "";
+  const rawTokens = evidenceTokensForQuestion(question);
+  const rawHits = rawTokens.filter((token) => textContainsTerm(text, token));
+  const conceptGroups = conceptGroupsForQuestion(question);
+  const conceptHits = conceptGroups.filter((group) => group.some((term) => textContainsTerm(text, term))).length;
+  const asksCount = /\b(how many|number of|count|limit|limits|balance)\b/i.test(question);
+  const asksWho = /\b(who|whom|person|officer|contact|member|chairperson|committee|community)\b/i.test(question);
+  const hasNumber = /\b\d+\b|\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty)\b/i.test(text);
+  const hasPersonTerms = /\b(officer|contact|member|committee|chairperson|manager|hr|representative|team|department|presiding|external)\b/i.test(text);
+  const hasEntitlementTerms = /\b(entitled|eligible|allowed|available|avail|limit|days?|weeks?|calendar year|approval|leave)\b/i.test(text);
+  const hasAnchor = conceptGroups.length ? conceptHits > 0 : rawHits.length > 0;
+  let passesIntent = true;
+  if (asksCount || intent === "entitlement") passesIntent = hasNumber || hasEntitlementTerms;
+  if (asksCount) passesIntent = hasNumber;
+  if (asksWho) passesIntent = hasPersonTerms;
+  const score = rawHits.length * 4 + conceptHits * 8 + Math.min(Number(match?.focus_score || 0), 20) / 2;
+  return {
+    rawHits,
+    conceptHits,
+    score,
+    passes: hasAnchor && passesIntent && score >= (conceptGroups.length ? 8 : 4),
+  };
+};
+
+const filterMatchesByEvidence = ({ matches = [], question, intent = "unknown", limit = 12 }) =>
+  (matches || [])
+    .map((match) => {
+      const evidence = scoreMatchEvidence({ match, question, intent });
+      return { ...match, evidence_score: evidence.score, evidence };
+    })
+    .filter((match) => match.evidence?.passes)
+    .sort(
+      (a, b) =>
+        Number(b.evidence_score || 0) - Number(a.evidence_score || 0) ||
+        Number(b.hybrid_score || 0) - Number(a.hybrid_score || 0) ||
+        Number(b.similarity || 0) - Number(a.similarity || 0)
+    )
+    .slice(0, limit);
+
 const fetchFocusedPolicyChunks = async ({ companyId, policyAreas = [], question, limit = 4 }) => {
   const policyIds = Array.from(
     new Set(
@@ -2357,27 +2457,6 @@ const entitlementTargetForQuestion = (question = "") => {
   return null;
 };
 
-const expectedPolicyNamePatternsForQuestion = (question = "") => {
-  const q = normalizeLookup(question);
-  if (/\b(sl|sick|casual sick|casual leave|medical|leave|attendance)\b/.test(q)) {
-    return [/holidays?,?\s+leave\s+&?\s+attendance/i, /\bleave\s+&?\s+attendance/i];
-  }
-  if (/\bholiday|holidays\b/.test(q)) {
-    return [/\bholiday list\b/i, /holidays?,?\s+leave\s+&?\s+attendance/i];
-  }
-  if (/\bmaternity\b/.test(q)) return [/\bmaternity\b/i];
-  if (/\bpaternity\b/.test(q)) return [/\bpaternity\b/i];
-  return [];
-};
-
-const findExpectedPolicyAreas = (question, modules = []) => {
-  const patterns = expectedPolicyNamePatternsForQuestion(question);
-  if (!patterns.length) return [];
-  return modules
-    .flatMap((module) => (module.policies || []).map((policy) => ({ module, policy })))
-    .filter(({ policy }) => patterns.some((pattern) => pattern.test(policy.name)));
-};
-
 const answerSimpleEntitlementFromMatches = ({ question, matches = [] }) => {
   const asksAmount = /\b(how many|count|number of|allowed|entitled|eligible|available|avail|get)\b/i.test(question);
   if (!asksAmount) return "";
@@ -2433,6 +2512,44 @@ const answerSimpleSanctionFromMatches = ({ question, matches = [] }) => {
     answerParts.push(next);
   }
   return cleanExtractedAnswer(answerParts.join(" "));
+};
+
+const answerCommitteeMembersFromMatches = ({ question, matches = [] }) => {
+  const asksMembers = /\b(who|whom|member|members|committee|ic|internal committee|sh ic|sh-ic)\b/i.test(question);
+  const asksPosh = /\b(posh|sexual harassment|harassment|ic|internal committee|committee|sh ic|sh-ic)\b/i.test(question);
+  if (!asksMembers || !asksPosh) return "";
+
+  const tableText = matches
+    .slice(0, 12)
+    .map((row) => row.chunk_text || "")
+    .find((text) => /\bmembers of\s+(sh-?ic|internal committee)\b/i.test(text) || /\brole in ic\b/i.test(text));
+  if (!tableText) return "";
+
+  const rows = [];
+  const normalized = tableText.replace(/\s+/g, " ");
+  const rowPattern =
+    /(?:^|\s)(\d{1,2})\s+(.+?)\s+(Presiding Officer\s*\(Chairperson\)|Internal Member|External Member)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\s+(\+91\s*\d{10}|\d{10})\b/gi;
+  let match;
+  while ((match = rowPattern.exec(normalized))) {
+    const prefix = cleanExtractedAnswer(match[2]).replace(
+      /\s+(Front Desk Exe\.?|Accountant|Sr\.?\s+Engineer|Jr\.?\s+Engineer|Site Supervisor|External POSH Expert|External Expert|POSH Expert|Manager|HR|Executive|Officer)$/i,
+      ""
+    );
+    const name =
+      prefix.match(/^([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})\b/)?.[1] ||
+      prefix;
+    rows.push({
+      name,
+      role: cleanExtractedAnswer(match[3]),
+      email: match[4],
+      phone: cleanExtractedAnswer(match[5]),
+    });
+  }
+  if (!rows.length) return "";
+  return rows
+    .slice(0, 8)
+    .map((row) => `${row.name} - ${row.role} (${row.email}, ${row.phone})`)
+    .join("\n");
 };
 
 const isLikelyTableOfContentsLine = (sentence = "") => {
@@ -4477,6 +4594,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     const s = String(t || "").toLowerCase().trim();
     return (
       s.startsWith("not in the uploaded policies") ||
+      s.startsWith("not found in uploaded policies") ||
       s.startsWith("i could not find") ||
       s.startsWith("i don't have enough information") ||
       s.startsWith("the chat service is busy") ||
@@ -4560,6 +4678,13 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         mode: "site_map",
       });
     }
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening)[!. ]*$/i.test(question.trim())) {
+      return res.json({
+        answer: "Hi. Ask me about an uploaded HR policy.",
+        sources: [],
+        mode: "greeting",
+      });
+    }
 
     const policySearchStatus = await getOrgPolicySearchStatus(req.orgCompanyId);
     if (policySearchStatus === "no_uploaded_documents") {
@@ -4614,61 +4739,18 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
 
     const closestPolicyArea = findClosestPolicyArea(questionForRetrieval, modules);
     const closestPolicyAreas = findClosestPolicyAreas(questionForRetrieval, modules);
-    const expectedPolicyAreas = findExpectedPolicyAreas(question, modules);
-    if (expectedPolicyAreas.length) {
-      const statuses = await Promise.all(
-        expectedPolicyAreas.map(async (entry) => ({
-          ...entry,
-          status: await getPolicyDocumentStatus({ companyId: req.orgCompanyId, policyId: entry.policy.id }),
-        }))
-      );
-      const uploadedExpected = statuses.filter((entry) => entry.status === "uploaded");
-      if (!uploadedExpected.length) {
-        const first = statuses[0];
-        return res.json({
-          answer: `"${first.policy.name}" is configured in ${first.module.name}, but its document is not uploaded yet. Ask HR to upload it before Genie can answer this.`,
-          sources: [],
-          mode: "policy_document_missing",
-        });
-      }
-    }
     let focusedPolicyChunks = await fetchFocusedPolicyChunks({
       companyId: req.orgCompanyId,
-      policyAreas: expectedPolicyAreas.length
-        ? expectedPolicyAreas.map((entry) => ({ ...entry, score: 1 }))
-        : closestPolicyAreas.length ? closestPolicyAreas : closestPolicyArea ? [closestPolicyArea] : [],
+      policyAreas: closestPolicyAreas.length ? closestPolicyAreas : closestPolicyArea ? [closestPolicyArea] : [],
       question: questionForRetrieval,
       limit: 8,
     });
-    if (!focusedPolicyChunks.length && closestPolicyArea?.rawScore > 0) {
-      const closestDocumentStatus = await getPolicyDocumentStatus({
-        companyId: req.orgCompanyId,
-        policyId: closestPolicyArea.policy.id,
-      });
-      if (closestDocumentStatus === "missing") {
-        return res.json({
-          answer: `"${closestPolicyArea.policy.name}" is configured in ${closestPolicyArea.module.name}, but its document is not uploaded yet. Ask HR to upload it before Genie can answer this.`,
-          sources: [],
-          mode: "policy_document_missing",
-        });
-      }
-    }
-    const earlyEntitlementAnswer = answerSimpleEntitlementFromMatches({ question, matches: focusedPolicyChunks });
-    if (earlyEntitlementAnswer) {
-      return res.json({
-        answer: earlyEntitlementAnswer,
-        sources: focusedPolicyChunks,
-        mode: "policy_entitlement_extract",
-      });
-    }
-    const earlySanctionAnswer = answerSimpleSanctionFromMatches({ question, matches: focusedPolicyChunks });
-    if (earlySanctionAnswer) {
-      return res.json({
-        answer: earlySanctionAnswer,
-        sources: focusedPolicyChunks,
-        mode: "policy_sanction_extract",
-      });
-    }
+    focusedPolicyChunks = filterMatchesByEvidence({
+      matches: focusedPolicyChunks,
+      question,
+      intent: questionIntent,
+      limit: 8,
+    });
     const expandedQuestionParts = [
       questionForRetrieval,
       `Question intent: ${questionIntent}.`,
@@ -4732,8 +4814,20 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     const policyNameById = new Map(
       modules.flatMap((module) => (module.policies || []).map((policy) => [policy.id, policy.name]))
     );
-    filtered = mergeMatchesById(focusedPolicyChunks, filtered).slice(0, 12);
+    filtered = filterMatchesByEvidence({
+      matches: mergeMatchesById(focusedPolicyChunks, filtered),
+      question,
+      intent: questionIntent,
+      limit: 12,
+    });
     matches = filtered;
+    if (!filtered.length) {
+      return res.json({
+        answer: "Not in the uploaded policies. Check with HR.",
+        sources: [],
+        mode: "policy_no_evidence",
+      });
+    }
     const directEntitlementAnswer = answerSimpleEntitlementFromMatches({ question, matches: filtered });
     if (directEntitlementAnswer) {
       return res.json({
@@ -4748,6 +4842,14 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         answer: directSanctionAnswer,
         sources: filtered,
         mode: "policy_sanction_extract",
+      });
+    }
+    const directCommitteeMembersAnswer = answerCommitteeMembersFromMatches({ question, matches: filtered });
+    if (directCommitteeMembersAnswer) {
+      return res.json({
+        answer: directCommitteeMembersAnswer,
+        sources: filtered,
+        mode: "policy_committee_members_extract",
       });
     }
     const directPolicySentenceAnswer = answerFromPolicySentences({

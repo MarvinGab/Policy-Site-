@@ -2,8 +2,9 @@
   position: fixed;
   right: 28px;
   bottom: 28px;
-  z-index: 120;
+  z-index: 10000;
   font-family: inherit;
+  pointer-events: none;
 }
 
 .chatbot-toggle {
@@ -20,6 +21,7 @@
   cursor: pointer;
   box-shadow: var(--shadow);
   transition: transform 200ms ease, box-shadow 200ms ease;
+  pointer-events: auto;
 }
 
 .chatbot.is-open .chatbot-toggle {
@@ -111,9 +113,9 @@
 }
 
 .chatbot-panel {
-  position: absolute;
-  right: 0;
-  bottom: 60px;
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
   width: min(390px, 88vw);
   background: var(--panel);
   border: 1px solid var(--outline);
@@ -411,5 +413,6 @@
   .chatbot-panel {
     left: 0;
     right: 0;
+    bottom: 16px;
   }
 }
