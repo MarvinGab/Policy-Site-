@@ -1,0 +1,9 @@
+[
+  {
+    "question": "How many casual leaves am I eligible for?",
+    "expected_document": "Leave Policy.pdf",
+    "expected_section_or_fact": "Casual leave entitlement",
+    "expected_answer_contains": ["casual leave"],
+    "notes": "Replace these sample expectations with facts from the current uploaded policies before scoring a real baseline."
+  }
+]

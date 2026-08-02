@@ -1,0 +1,838 @@
+/* ── Direct Policy + Genie view ────────────────────────────────────────────
+   Scoped to body[data-display-mode="direct"]. Module view is untouched.
+
+   One attribute drives everything: data-state = browsing | genie | history.
+
+   Four widths, deliberately different. Applying one max-width to all of them
+   is what made the collapsed state read as a centred box floating inside a
+   much wider library. */
+
+body[data-display-mode="direct"] .dashboard-grid.rail-layout {
+  display: block;
+  min-width: 0;
+}
+
+body[data-display-mode="direct"] .chatbot {
+  display: none;
+}
+
+.direct-view {
+  /* Shelf and library share this: collapsing must not change the width. */
+  --w-shelf: min(100%, clamp(680px, 92vw, 2280px));
+  /* Large screens should not leave dead gutters beside the active chat. */
+  --w-convo: min(100%, clamp(720px, 68vw, 1500px));
+  /* The anchor tracks the conversation instead of sitting as a narrow dock. */
+  --w-composer: min(100%, clamp(720px, 76vw, 1700px));
+
+  --glass: color-mix(in srgb, var(--surface-solid, #f8f9fd) 66%, transparent);
+  --hairline: color-mix(in srgb, var(--ink) 10%, transparent);
+  --policy-tile-bg: color-mix(in srgb, var(--panel-strong) 88%, #fff 12%);
+  --policy-tile-bg-hover: color-mix(in srgb, var(--panel-strong) 76%, #fff 24%);
+  --policy-tile-border: color-mix(in srgb, var(--ink) 14%, transparent);
+  --policy-tile-highlight: rgba(255, 255, 255, 0.82);
+  --policy-tile-shadow: 0 1px 2px rgba(18, 22, 36, 0.08), 0 12px 28px rgba(18, 22, 36, 0.10);
+  --policy-tile-shadow-hover: 0 2px 4px rgba(18, 22, 36, 0.10), 0 18px 36px rgba(18, 22, 36, 0.14);
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* A viewport-height shell in EVERY state, not just while chatting. This is
+     what anchors the composer: it is the last flex child of a column that is
+     exactly as tall as the viewport, so it lands at the bottom by layout
+     rather than by margin tricks or spacer elements. Browsing and chatting
+     therefore share one composer position — it does not jump on transition. */
+  height: calc(100svh - 112px);
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding-bottom: 0;
+}
+
+/* The dashboard's own generous bottom padding would be added below a
+   full-height shell and push the page into scrolling. */
+body[data-display-mode="direct"] .policy-dashboard {
+  padding-bottom: 18px;
+}
+
+body[data-display-mode="direct"][data-theme="midnight"] .direct-view,
+html[data-theme="midnight"] body[data-display-mode="direct"] .direct-view,
+body[data-display-mode="direct"][data-theme="carbon"] .direct-view,
+html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
+  --policy-tile-bg: color-mix(in srgb, var(--panel-strong) 76%, #fff 5%);
+  --policy-tile-bg-hover: color-mix(in srgb, var(--panel-strong) 68%, var(--accent) 8%);
+  --policy-tile-border: color-mix(in srgb, var(--ink) 20%, transparent);
+  --policy-tile-highlight: rgba(255, 255, 255, 0.12);
+  --policy-tile-shadow: 0 1px 1px rgba(0, 0, 0, 0.38), 0 14px 32px rgba(0, 0, 0, 0.24);
+  --policy-tile-shadow-hover: 0 2px 2px rgba(0, 0, 0, 0.42), 0 20px 42px rgba(0, 0, 0, 0.32);
+}
+
+/* ══ Shelf / library ══════════════════════════════════════════════════════ */
+
+/* Shrinkable, never growable: with many policies the library gives way and
+   scrolls internally rather than pushing the composer off the viewport. */
+.shelf {
+  width: var(--w-shelf);
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shelf__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 14px;
+  transition: padding 240ms var(--ease);
+}
+
+.shelf__title {
+  font-family: "Satoshi", "Inter", system-ui, sans-serif;
+  font-size: clamp(1.35rem, 0.9vw + 1.05rem, 1.85rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  transition: font-size 240ms var(--ease);
+}
+
+.shelf__count {
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Only meaningful on the collapsed shelf — in browsing the library is
+   already open, so the control would be a no-op. */
+.direct-view[data-state="browsing"] .shelf__toggle {
+  display: none;
+}
+
+.shelf__toggle {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease;
+}
+
+.shelf__toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shelf__toggle:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.shelf__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Chips only exist in the collapsed shelf. */
+.shelf__chips {
+  display: none;
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+}
+
+.shelf__chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: none;
+  max-width: 220px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.chip:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Collapsed: a shallow full-width context bar. Same outer width as the
+   library above it — only the height and density change. One row of chips;
+   the row scrolls rather than wrapping to a second. */
+.direct-view[data-state="genie"] .shelf,
+.direct-view[data-state="history"] .shelf {
+  padding: 9px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--glass);
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+}
+
+.direct-view[data-state="genie"] .shelf__bar,
+.direct-view[data-state="history"] .shelf__bar {
+  padding-bottom: 0;
+}
+
+.direct-view[data-state="genie"] .shelf__title,
+.direct-view[data-state="history"] .shelf__title {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.direct-view[data-state="genie"] .shelf__chips,
+.direct-view[data-state="history"] .shelf__chips {
+  display: flex;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .direct-view[data-state="genie"] .shelf,
+  .direct-view[data-state="history"] .shelf,
+  .composer {
+    background: var(--surface-solid, var(--panel-strong));
+  }
+}
+
+/* The library body collapses via grid rows — no measured height needed. */
+.shelf__body {
+  display: grid;
+  grid-template-rows: 1fr;
+  min-height: 0;
+  transition: grid-template-rows 260ms var(--ease), opacity 200ms ease;
+  opacity: 1;
+}
+
+/* The library scrolls inside its own region so reaching Ask Genie never
+   requires scrolling the page past twenty-odd policies.
+
+   Deliberately no bottom fade mask: a mask can't tell whether the content
+   actually overflows, so it dimmed the last row of a four-policy library
+   that fitted perfectly well. The thin scrollbar is the honest signal, and
+   the composer sits far below the region in any case. */
+.shelf__body > * {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
+}
+
+.direct-view[data-state="genie"] .shelf__body > *,
+.direct-view[data-state="history"] .shelf__body > * {
+  overflow: hidden;
+}
+
+.direct-view[data-state="genie"] .shelf__body,
+.direct-view[data-state="history"] .shelf__body {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shelf__list {
+  list-style: none;
+  margin: 0;
+  padding: 1px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(clamp(320px, 24vw, 400px), 100%), 1fr));
+  gap: clamp(6px, 0.5vw, 10px);
+}
+
+.shelf__empty {
+  margin: 0;
+  padding: 22px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.doc-row {
+  list-style: none;
+  min-width: 0;
+}
+
+.doc-row[hidden] {
+  display: none;
+}
+
+/* A tile, not a line of text: translucent surface, hairline border, small
+   radius, soft lift on hover. Compact enough that 24 of them still read as a
+   library rather than a wall of cards. */
+.doc-row__btn {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid var(--policy-tile-border);
+  border-radius: 11px;
+  background: var(--policy-tile-bg);
+  -webkit-backdrop-filter: saturate(120%) blur(8px);
+  backdrop-filter: saturate(120%) blur(8px);
+  box-shadow: inset 0 1px 0 var(--policy-tile-highlight), var(--policy-tile-shadow);
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background 180ms var(--ease), border-color 180ms var(--ease),
+    box-shadow 180ms var(--ease), transform 180ms var(--ease);
+}
+
+.doc-row__btn::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.12), transparent 38%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms var(--ease);
+  z-index: -1;
+}
+
+.doc-row__btn:hover {
+  background: var(--policy-tile-bg-hover);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--policy-tile-border));
+  box-shadow: inset 0 1px 0 var(--policy-tile-highlight), var(--policy-tile-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.doc-row__btn:hover::before {
+  opacity: 1;
+}
+
+.doc-row__go {
+  flex: none;
+  display: inline-flex;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity 180ms ease, transform 180ms var(--ease);
+}
+
+.doc-row__go svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.doc-row__btn:hover .doc-row__go {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.doc-row__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.doc-row__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+}
+
+.doc-row__glyph {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.doc-row__name {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+}
+
+.doc-row__name::-webkit-scrollbar {
+  display: none;
+}
+
+.doc-row__name-text {
+  display: inline-block;
+  min-width: 100%;
+}
+
+.doc-row__name.is-overflowing .doc-row__name-text {
+  animation: policy-name-pan 8s ease-in-out infinite alternate;
+}
+
+.doc-row__btn:hover .doc-row__name,
+.doc-row__name:focus {
+  overflow-x: auto;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.doc-row__btn:hover .doc-row__name-text,
+.doc-row__name:focus .doc-row__name-text {
+  animation: none;
+}
+
+@keyframes policy-name-pan {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-100% + var(--policy-name-window, 100%))); }
+}
+
+.doc-row.is-opening .doc-row__btn {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.doc-row.is-flash .doc-row__btn {
+  animation: direct-policy-flash 1.7s var(--ease);
+}
+
+@keyframes direct-policy-flash {
+  0%,
+  100% {
+    border-color: var(--policy-tile-border);
+    box-shadow: inset 0 1px 0 var(--policy-tile-highlight), var(--policy-tile-shadow);
+  }
+  28% {
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--policy-tile-border));
+    box-shadow: inset 0 1px 0 var(--policy-tile-highlight), 0 0 0 4px var(--accent-soft),
+      var(--policy-tile-shadow-hover);
+  }
+}
+
+/* ══ Genie mark ═══════════════════════════════════════════════════════════
+   The entire assistant identity: 16px in the composer, 14px beside answers.
+   No hero, no heading. */
+
+/* Positioned so .bot-hand — which is absolute — anchors to the face, and the
+   float animation from chatbot.css applies to the pair. This is the Module
+   View character at composer scale, not a new icon. */
+.genie-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 20px;
+}
+
+.genie-mark .bot-face {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+}
+
+.genie-mark .bot-face::before,
+.genie-mark .bot-face::after {
+  top: 6px;
+  width: 3.5px;
+  height: 3.5px;
+}
+
+.genie-mark .bot-face::before { left: 3.5px; }
+.genie-mark .bot-face::after { right: 3.5px; }
+
+/* Keeps the wave from chatbot.css, scaled to the mark. */
+.genie-mark .bot-hand {
+  right: -3px;
+  top: 11px;
+  width: 9px;
+  height: 4px;
+}
+
+/* Only the composer's mark drifts; answer marks stay still so a long thread
+   isn't full of moving parts. */
+.composer .genie-mark {
+  animation: genie-float 4.5s ease-in-out infinite;
+}
+
+.turn__role--genie .genie-mark {
+  width: 17px;
+  height: 16px;
+}
+
+.turn__role--genie .bot-face {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+}
+
+.turn__role--genie .bot-face::before,
+.turn__role--genie .bot-face::after {
+  top: 4.5px;
+  width: 3px;
+  height: 3px;
+}
+
+.turn__role--genie .bot-face::before { left: 3px; }
+.turn__role--genie .bot-face::after { right: 3px; }
+
+.turn__role--genie .bot-hand {
+  right: -2px;
+  top: 8px;
+  width: 7px;
+  height: 3px;
+}
+
+/* ══ Workspace ════════════════════════════════════════════════════════════ */
+
+.genie {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* Breathing room so the anchored composer clears the viewport floor without
+   a margin hack on the composer itself. */
+.composer {
+  margin-bottom: 6px;
+}
+
+/* Present in every state. While browsing it renders nothing and simply
+   absorbs the slack between the library and the composer — the flexible
+   region the layout needs, rather than a spacer div or a margin-top hack.
+   Once chatting, the same element holds the conversation and scrolls. */
+.genie__scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  width: var(--w-convo);
+  margin: 0 auto;
+  padding: 2px 0;
+}
+
+.direct-view[data-state="genie"] .genie__scroll,
+.direct-view[data-state="history"] .genie__scroll {
+  animation: fade-up 240ms var(--ease) both;
+}
+
+.genie__earlier {
+  align-self: flex-start;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.genie__earlier[hidden] {
+  display: none;
+}
+
+.genie__earlier:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.genie__earlier:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.genie__earlier .chev {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(-90deg);
+  transition: transform 240ms var(--ease);
+}
+
+.direct-view[data-state="history"] .genie__earlier .chev {
+  transform: rotate(0deg);
+}
+
+.genie__earlier-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.genie__earlier-count:empty {
+  display: none;
+}
+
+.genie__turns {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+/* ── Turns: typography and whitespace, no cards or bubbles ── */
+
+.turn {
+  display: grid;
+  gap: 5px;
+  animation: fade-up 220ms var(--ease) both;
+}
+
+.turn__role {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink-muted) 88%, transparent);
+}
+
+.turn__role--genie {
+  margin-top: 16px;
+}
+
+.turn__q {
+  margin: 0;
+  font-size: clamp(1rem, 0.3vw + 0.93rem, 1.14rem);
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.turn__a {
+  font-size: clamp(0.94rem, 0.2vw + 0.89rem, 1.02rem);
+  line-height: 1.72;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.turn__a > * {
+  margin: 0;
+}
+
+.turn__a > * + * {
+  margin-top: 0.85em;
+}
+
+.turn__a ul {
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4em;
+}
+
+.turn__a li {
+  position: relative;
+  padding-left: 1.2em;
+}
+
+.turn__a li::before {
+  content: "";
+  position: absolute;
+  left: 0.25em;
+  top: 0.72em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  opacity: 0.55;
+}
+
+.turn.is-pending .turn__a {
+  color: var(--ink-muted);
+}
+
+/* ══ Composer — the anchor ════════════════════════════════════════════════ */
+
+.composer {
+  flex: none;
+  width: var(--w-composer);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 9px 9px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 13%, transparent);
+  background: var(--glass);
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+  box-shadow: 0 1px 2px rgba(18, 22, 36, 0.04), 0 8px 24px rgba(18, 22, 36, 0.06);
+  transition: border-color 200ms ease, box-shadow 220ms ease;
+}
+
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 10px 28px rgba(18, 22, 36, 0.1);
+}
+
+.composer .genie-mark {
+  opacity: 0.9;
+}
+
+.composer__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  resize: none;
+  font: inherit;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: var(--ink);
+  padding: 6px 0;
+  max-height: 160px;
+}
+
+.composer__input:focus {
+  outline: none;
+}
+
+.composer__input::placeholder {
+  color: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+}
+
+.composer__send {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 160ms ease;
+}
+
+.composer__send svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.composer__send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.composer__send:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .direct-view *,
+  .direct-view *::before {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+@media (min-width: 1440px) and (min-height: 860px) {
+  .direct-view[data-state="genie"],
+  .direct-view[data-state="history"] {
+    padding-bottom: clamp(28px, 4vh, 64px);
+  }
+}
+
+@media (max-width: 720px) {
+  .direct-view {
+    --w-shelf: 100%;
+    --w-convo: 100%;
+    --w-composer: 100%;
+  }
+
+  .direct-view[data-state="genie"],
+  .direct-view[data-state="history"] {
+    height: calc(100svh - 130px);
+  }
+
+  /* Too narrow to preview policies: the shelf becomes a single line with an
+     explicit way back. */
+  .direct-view[data-state="genie"] .shelf__chips,
+  .direct-view[data-state="history"] .shelf__chips {
+    display: none;
+  }
+
+  .shelf__toggle {
+    padding: 5px 8px;
+  }
+}

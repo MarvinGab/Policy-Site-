@@ -20,6 +20,13 @@ create table if not exists companies (
   access_token text,
   access_mode text not null default 'standalone'
     check (access_mode in ('standalone', 'hrms_link')),
+  -- How the employee-facing policy page presents itself. Independent of
+  -- access_mode, which governs *how people sign in*; this governs what they
+  -- see once they are in. 'module' is the module-card dashboard, 'direct' is
+  -- the flat policy library with the Genie workspace beneath it. Existing
+  -- organizations keep the module view they already know.
+  policy_display_mode text not null default 'module'
+    check (policy_display_mode in ('module', 'direct')),
   created_at timestamptz not null default now()
 );
 
@@ -27,6 +34,7 @@ create table if not exists companies (
 alter table companies
   add column if not exists access_token text,
   add column if not exists access_mode text not null default 'standalone',
+  add column if not exists policy_display_mode text not null default 'module',
   add column if not exists theme_id text not null default 'default',
   add column if not exists logo_url text,
   add column if not exists portal_name text,
@@ -43,6 +51,13 @@ begin
     alter table companies
       add constraint companies_access_mode_check
       check (access_mode in ('standalone', 'hrms_link'));
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'companies_policy_display_mode_check'
+  ) then
+    alter table companies
+      add constraint companies_policy_display_mode_check
+      check (policy_display_mode in ('module', 'direct'));
   end if;
 end$$;
 
@@ -438,6 +453,7 @@ create or replace function match_policy_chunks(
 returns table (
   id uuid,
   policy_id uuid,
+  document_id uuid,
   chunk_text text,
   similarity float
 )
@@ -445,6 +461,7 @@ language sql stable as $$
   select
     policy_chunks.id,
     policy_chunks.policy_id,
+    policy_chunks.document_id,
     policy_chunks.chunk_text,
     1 - (policy_chunks.embedding <=> query_embedding) as similarity
   from policy_chunks
@@ -467,6 +484,7 @@ create or replace function match_policy_chunks_hybrid(
 returns table (
   id uuid,
   policy_id uuid,
+  document_id uuid,
   chunk_text text,
   similarity float,
   hybrid_score float
@@ -476,6 +494,7 @@ language sql stable as $$
     select
       policy_chunks.id,
       policy_chunks.policy_id,
+      policy_chunks.document_id,
       policy_chunks.chunk_text,
       1 - (policy_chunks.embedding <=> query_embedding) as similarity,
       row_number() over (order by policy_chunks.embedding <=> query_embedding) as v_rank
@@ -503,6 +522,7 @@ language sql stable as $$
   select
     c.id,
     c.policy_id,
+    c.document_id,
     c.chunk_text,
     coalesce(v.similarity, 0) as similarity,
     -- RRF with k=60 (standard); vector and text contribute independently

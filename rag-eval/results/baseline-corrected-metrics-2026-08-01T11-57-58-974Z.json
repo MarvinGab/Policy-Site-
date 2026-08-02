@@ -1,0 +1,56 @@
+{
+  "source_baseline_file": "rag-eval/results/baseline-2026-08-01T11-57-58-974Z.json",
+  "generated_at": "2026-08-01T12:18:37.363Z",
+  "metric_definition_bug": {
+    "issue": "Overall raw_query_retrieval_accuracy used raw_query_retrieval_pass, but per-style retrieval_accuracy used retrieval_pass, which equals raw retrieval plus final-context/ranking success. These are different denominators/definitions, so 55.8% could not reconcile with per-style retrieval percentages.",
+    "raw_query_retrieval_pass": "Correct evidence appears anywhere in retrieved candidate chunks.",
+    "retrieval_pass": "Correct evidence appears in final selected context; this includes ranking/context-selection success."
+  },
+  "totals": {
+    "total_cases": 95,
+    "answerable_cases": 83,
+    "unanswerable_cases": 12
+  },
+  "corrected_metrics": {
+    "answerable_retrieval_accuracy": 0.4939759036144578,
+    "answerable_final_context_retrieval_accuracy": 0.060240963855421686,
+    "policy_language_retrieval_accuracy": 0.6153846153846154,
+    "lazy_employee_retrieval_accuracy": 0.42592592592592593,
+    "follow_up_retrieval_accuracy": 0.6666666666666666,
+    "unanswerable_answer_accuracy": 0.4166666666666667,
+    "hallucination_on_unanswerable_count": 7,
+    "answer_accuracy_all_cases": 0.37894736842105264,
+    "answer_accuracy_excluding_quota_failures": 0.4,
+    "number_of_quota_failed_cases": 5
+  },
+  "by_query_style": {
+    "POLICY_LANGUAGE": {
+      "total": 26,
+      "raw_query_retrieval_accuracy": 0.6153846153846154,
+      "final_context_retrieval_accuracy": 0.038461538461538464,
+      "answer_accuracy_all_cases": 0.23076923076923078,
+      "answer_accuracy_excluding_quota_failures": 0.23076923076923078
+    },
+    "LAZY_EMPLOYEE": {
+      "total": 54,
+      "raw_query_retrieval_accuracy": 0.42592592592592593,
+      "final_context_retrieval_accuracy": 0.05555555555555555,
+      "answer_accuracy_all_cases": 0.4444444444444444,
+      "answer_accuracy_excluding_quota_failures": 0.4528301886792453
+    },
+    "FOLLOW_UP": {
+      "total": 3,
+      "raw_query_retrieval_accuracy": 0.6666666666666666,
+      "final_context_retrieval_accuracy": 0.3333333333333333,
+      "answer_accuracy_all_cases": 0.3333333333333333,
+      "answer_accuracy_excluding_quota_failures": 0.3333333333333333
+    }
+  },
+  "quota_failed_case_ids": [
+    "trio-leave-006-lazy-2",
+    "trio-unanswerable-002-lazy-1",
+    "trio-unanswerable-004",
+    "trio-unanswerable-004-lazy-1",
+    "trio-unanswerable-004-lazy-2"
+  ]
+}

@@ -14,6 +14,65 @@ const prefetchFileBlob = (url) => {
   document.head.appendChild(link);
 };
 
+// Below this the rail is a stacked accordion; above it, hover flyouts.
+// Kept in sync with the @media blocks in dashboard.css by hand — there is
+// one breakpoint and both sides name it explicitly.
+const TOUCH_LAYOUT = "(max-width: 980px)";
+
+/**
+ * Decide which side each flyout opens on, and bound it to the room actually
+ * available there.
+ *
+ * The side used to come from `:nth-child(3n)`, which baked in a three-column
+ * grid. Two things now make the index unusable: the column count responds to
+ * the canvas, and a partial last row is centred — card 7 of 7 is the
+ * rightmost card in a centred row of three, yet it is not a 4th child.
+ *
+ * The measured bounds are not belt-and-braces. Before them, a right-column
+ * flyout at 1280px pushed the document to 1321px; `overflow-x: hidden` on
+ * body turned that into silently clipped content rather than a visible bug.
+ */
+const layoutFlyouts = (container) => {
+  const list = container.querySelector(".rail-list");
+  if (!list) return;
+  const cards = [...list.querySelectorAll(".policy-module-card")];
+  if (!cards.length) return;
+
+  if (window.matchMedia(TOUCH_LAYOUT).matches) {
+    // Stacked: no side to choose and nothing to bound, but the toggle state
+    // still needs to be announced.
+    cards.forEach((card) => {
+      card.removeAttribute("data-flyout");
+      card.style.removeProperty("--flyout-space");
+      card.style.removeProperty("--flyout-vspace");
+      card
+        .querySelector(".rail-item")
+        ?.setAttribute("aria-expanded", String(card.classList.contains("is-open")));
+    });
+    return;
+  }
+
+  const cols = Number.parseInt(getComputedStyle(list).getPropertyValue("--rail-cols"), 10) || 3;
+  const edge = 16; // Breathing room against the viewport edge.
+
+  cards.forEach((card, index) => {
+    card.classList.remove("is-open");
+    const item = card.querySelector(".rail-item");
+    item?.removeAttribute("aria-expanded");
+
+    const lastInRow = (index + 1) % cols === 0 || index === cards.length - 1;
+    card.dataset.flyout = lastInRow ? "left" : "right";
+
+    const rect = card.getBoundingClientRect();
+    const side = lastInRow ? rect.left : window.innerWidth - rect.right;
+    card.style.setProperty("--flyout-space", `${Math.max(240, Math.floor(side - 24 - edge))}px`);
+    card.style.setProperty(
+      "--flyout-vspace",
+      `${Math.max(200, Math.floor(window.innerHeight - rect.top - edge))}px`
+    );
+  });
+};
+
 export const initModules = () => {
   const moduleCards = document.querySelectorAll(".module-card");
   moduleCards.forEach((card, index) => {
@@ -27,6 +86,38 @@ export const initModules = () => {
   // are rendered later by policy-render.js (after the API call resolves).
   const container = document.querySelector("[data-policy-grid]");
   if (!container) return;
+
+  // The cards are rendered later by policy-render.js (after the API call) and
+  // re-rendered when the cached payload changes, so watch the container
+  // rather than measuring once at init.
+  let frame = 0;
+  const scheduleLayout = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => layoutFlyouts(container));
+  };
+  new MutationObserver(scheduleLayout).observe(container, { childList: true, subtree: true });
+  window.addEventListener("resize", scheduleLayout);
+  scheduleLayout();
+
+  // Touch equivalent of the hover flyout: tap a card to open its policies,
+  // one at a time. Registered before the navigation handler below so an
+  // accordion tap doesn't also count as a card activation.
+  container.addEventListener("click", (event) => {
+    if (!window.matchMedia(TOUCH_LAYOUT).matches) return;
+    const item = event.target.closest(".rail-item");
+    if (!item) return;
+    const card = item.closest(".policy-module-card");
+    if (!card) return;
+    const wasOpen = card.classList.contains("is-open");
+    container.querySelectorAll(".policy-module-card.is-open").forEach((open) => {
+      open.classList.remove("is-open");
+      open.querySelector(".rail-item")?.setAttribute("aria-expanded", "false");
+    });
+    if (!wasOpen) {
+      card.classList.add("is-open");
+      item.setAttribute("aria-expanded", "true");
+    }
+  });
 
   container.addEventListener("click", (event) => {
     const card = event.target.closest(".policy-module-card");
@@ -95,6 +186,17 @@ const initRailSearch = (container) => {
 
   const buildIndex = () => {
     index = [];
+    container.querySelectorAll(".doc-row").forEach((row) => {
+      const policyName = (row.querySelector(".doc-row__name-text")?.textContent || row.textContent || "").trim();
+      if (!policyName) return;
+      index.push({
+        type: "policy",
+        label: policyName,
+        meta: "Policy",
+        policyId: row.dataset.policyId,
+        direct: true,
+      });
+    });
     container.querySelectorAll(".policy-module-card").forEach((card) => {
       // Strip the trailing "<n> policies" counter off the title text.
       const rawTitle = card.querySelector(".rail-title")?.textContent || "";
@@ -139,7 +241,18 @@ const initRailSearch = (container) => {
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
 
+  const filterDirectRows = (query) => {
+    const rows = [...container.querySelectorAll(".doc-row")];
+    if (!rows.length) return;
+    const q = query.toLowerCase();
+    rows.forEach((row) => {
+      const name = (row.querySelector(".doc-row__name-text")?.textContent || row.textContent || "").toLowerCase();
+      row.hidden = Boolean(q) && !name.includes(q);
+    });
+  };
+
   const render = (query) => {
+    filterDirectRows(query);
     if (!query) {
       close();
       return;
@@ -180,7 +293,17 @@ const initRailSearch = (container) => {
     close();
     search.value = "";
     if (entry.type === "policy" && entry.policyId) {
-      previewLatestDocument({ policyId: entry.policyId });
+      const directRow = entry.direct
+        ? container.querySelector(`.doc-row[data-policy-id="${CSS.escape(entry.policyId)}"]`)
+        : null;
+      directRow?.scrollIntoView({ behavior: "smooth", block: "center" });
+      directRow?.classList.remove("is-flash");
+      if (directRow) {
+        void directRow.offsetWidth;
+        directRow.classList.add("is-flash");
+        setTimeout(() => directRow.classList.remove("is-flash"), 1700);
+      }
+      previewLatestDocument({ policyId: entry.policyId, item: directRow || undefined });
       return;
     }
     const card = container.querySelector(`.policy-module-card[data-module="${entry.moduleId}"]`);
@@ -236,7 +359,14 @@ const initRailSearch = (container) => {
   new MutationObserver(buildIndex).observe(container, { childList: true, subtree: true });
 };
 
-const previewLatestDocument = async ({ policyId, item }) => {
+/**
+ * Open a policy's most recent document in the shared viewer.
+ *
+ * Exported so Direct Policy View can reuse this exact path — same prefetch
+ * cache, same viewer modal, same toasts. There is deliberately no second
+ * viewer implementation.
+ */
+export const previewLatestDocument = async ({ policyId, item }) => {
   item?.classList.add("is-opening");
   try {
     // Hit the hover-prefetch cache first — usually populated by the time

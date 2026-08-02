@@ -1,6 +1,11 @@
-// Renders the rail of module cards for an organization on /policies.html.
+// Renders the employee policy page for an organization on /policies.html.
 // Pulls the modules + policies from the API for the org specified in ?org=<id>.
 // If no org param is given (e.g. someone hits /policies.html directly), bounces to /orgs.html.
+//
+// Two presentations share this payload — module cards, or the Direct Policy +
+// Genie view — selected by the org's policy_display_mode.
+
+import { buildDirectView, initDirectView } from "./direct-view.js";
 
 const ICON_BY_SLUG = {
   "doing-the-right-thing": "/Images/ChatGPT Image Jan 13, 2026, 03_46_37 PM.png",
@@ -146,9 +151,24 @@ export const initPolicyRender = () => {
 };
 
 // Centralized render so cache-paint and fresh-paint stay in sync.
+//
+// One of two presentations, chosen by the organization's policy_display_mode
+// (carried on data.org, since /api/org/settings is manager-only). Both are
+// fed the same payload — direct view flattens the modules it is given rather
+// than loading policies of its own.
 const renderRail = (container, data) => {
   const modules = data.modules || [];
-  container.innerHTML = buildPolicyRail(modules);
+  const displayMode = data.org?.policy_display_mode === "direct" ? "direct" : "module";
+  // Drives the CSS that hides the floating assistant in direct mode and
+  // relaxes the dashboard's own width constraints.
+  document.body.dataset.displayMode = displayMode;
+
+  if (displayMode === "direct") {
+    container.innerHTML = buildDirectView(data);
+    initDirectView(container);
+  } else {
+    container.innerHTML = buildPolicyRail(modules);
+  }
   container.querySelectorAll(".reveal").forEach((element) => element.classList.add("is-visible"));
   updatePolicyTotal(modules, data.org, data.stats);
 };

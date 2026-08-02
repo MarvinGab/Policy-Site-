@@ -35,6 +35,7 @@ const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 18000);
 const CHAT_ENABLE_QUERY_REWRITE = process.env.CHAT_ENABLE_QUERY_REWRITE === "true";
 const CHAT_DAILY_CAP_PER_ORG = Number(process.env.CHAT_DAILY_CAP_PER_ORG || 200);
 const CHAT_CACHE_TTL_MS = Number(process.env.CHAT_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
+const RAG_DEBUG = process.env.RAG_DEBUG === "true";
 const SESSION_STORE = (process.env.SESSION_STORE || (IS_PRODUCTION ? "supabase" : "file")).toLowerCase();
 const HRMS_LAUNCH_SECRET = process.env.HRMS_LAUNCH_SECRET || (IS_PRODUCTION ? "" : SESSION_SECRET);
 // Lifetime of a session created by a signed HRMS launch. Deliberately far
@@ -791,6 +792,19 @@ const chatWithGemini = async (prompt) => {
     },
   });
   return result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+};
+
+const wantsRagDebug = (req) =>
+  !IS_PRODUCTION && (RAG_DEBUG || req.get("x-rag-debug") === "true" || req.query?.debug === "rag");
+
+const emitRagDebug = (req, payload) => {
+  if (!wantsRagDebug(req)) return;
+  console.log(`[rag-debug] ${JSON.stringify(payload)}`);
+};
+
+const withRagDebug = (req, body, debug) => {
+  emitRagDebug(req, debug);
+  return wantsRagDebug(req) ? { ...body, debug } : body;
 };
 
 const isIncompleteAiAnswer = (answer = "") => {
@@ -2158,6 +2172,7 @@ const classifyQuestionContext = (question = "") => {
     { intent: "navigation", pattern: /\b(where|find|located|open|go to|which tile|which module)\b/ },
     { intent: "policy_count", pattern: /\b(how many|count|number of).*\b(policy|policies|uploaded|pending)\b|\b(policy|policies|uploaded|pending).*\b(how many|count|number of)\b/ },
     { intent: "policy_listing", pattern: /\b(list|which|what|show|all).*\b(policy|policies|module|modules|tile|tiles)\b|\b(policy|policies|module|modules|tile|tiles).*\b(list|which|what|show|all)\b/ },
+    { intent: "consequence", pattern: /\b(punish|punishment|penalty|penalties|consequence|consequences|disciplinary|discipline|misconduct|violation|violations|breach|action|termination|suspension|warning|reprimand|sanction|sanctions)\b/ },
     { intent: "entitlement", pattern: /\b(eligible|eligibility|entitled|entitlement|get|allowed|available|any|have|benefit|leave)\b/ },
     { intent: "procedure", pattern: /\b(how|process|steps|apply|request|submit|approve|approval|claim|do i|what should)\b/ },
     { intent: "reimbursement", pattern: /\b(reimburse|reimbursement|claim|allowance|bill|expense|internet|phone|telephone|fuel|car|book|periodical)\b/ },
@@ -2172,6 +2187,7 @@ const contextHintForIntent = (intent) => {
     entitlement: "Look for eligibility, limits, entitlement, conditions, and exceptions. Do not treat nearby leave types as proof of the requested leave type unless it is explicitly mentioned.",
     procedure: "Look for process steps, approval flow, required documents, timelines, and who the employee must contact.",
     reimbursement: "Look for allowance, reimbursement, claim limits, required bills, eligibility, and submission process.",
+    consequence: "Look for consequences, disciplinary action, penalties, sanctions, corrective action, suspension, termination, warnings, or other outcomes after a violation or misconduct is established. Do not answer with only definitions or prohibited-behavior statements.",
     conduct_compliance: "Look for rules, prohibited behavior, reporting path, investigation process, and disciplinary consequences.",
     definition: "Look for definitions or terms explained in the policy text.",
     navigation: "Answer using dashboard/module/policy location only.",
@@ -2330,6 +2346,25 @@ const conceptGroupsForQuestion = (question = "") => {
   if (/\b(holiday|holidays|festival|public holiday|optional holiday)\b/.test(q)) {
     groups.push(["holiday", "holidays", "public holiday", "optional holiday", "festival"]);
   }
+  if (/\b(punish|punishment|penalty|penalties|consequence|consequences|disciplinary|discipline|misconduct|violation|violations|breach|action|termination|suspension|warning|reprimand|sanction|sanctions)\b/.test(q)) {
+    groups.push([
+      "disciplinary",
+      "disciplinary action",
+      "punishment",
+      "penalty",
+      "penalties",
+      "consequence",
+      "misconduct",
+      "violation",
+      "breach",
+      "warning",
+      "reprimand",
+      "suspension",
+      "termination",
+      "sanction",
+      "corrective action",
+    ]);
+  }
   return groups;
 };
 
@@ -2344,11 +2379,13 @@ const scoreMatchEvidence = ({ match, question, intent = "unknown" }) => {
   const hasNumber = /\b\d+\b|\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty)\b/i.test(text);
   const hasPersonTerms = /\b(officer|contact|member|committee|chairperson|manager|hr|representative|team|department|presiding|external)\b/i.test(text);
   const hasEntitlementTerms = /\b(entitled|eligible|allowed|available|avail|limit|days?|weeks?|calendar year|approval|leave)\b/i.test(text);
+  const hasConsequenceTerms = /\b(disciplinary|punishment|penalt(?:y|ies)|consequence|misconduct|violation|breach|warning|reprimand|suspension|termination|sanction|corrective action|counselling|community service|withholding|censure)\b/i.test(text);
   const hasAnchor = conceptGroups.length ? conceptHits > 0 : rawHits.length > 0;
   let passesIntent = true;
   if (asksCount || intent === "entitlement") passesIntent = hasNumber || hasEntitlementTerms;
   if (asksCount) passesIntent = hasNumber;
   if (asksWho) passesIntent = hasPersonTerms;
+  if (intent === "consequence") passesIntent = hasConsequenceTerms;
   const score = rawHits.length * 4 + conceptHits * 8 + Math.min(Number(match?.focus_score || 0), 20) / 2;
   return {
     rawHits,
@@ -2373,6 +2410,17 @@ const filterMatchesByEvidence = ({ matches = [], question, intent = "unknown", l
     )
     .slice(0, limit);
 
+const POLICY_CONTEXT_CHARS_PER_EXCERPT = 900;
+
+const buildPolicyContextFromMatches = ({ matches = [], policyNameById = new Map(), limit = 6 }) =>
+  (matches || [])
+    .slice(0, limit)
+    .map((row, index) => {
+      const policyName = policyNameById.get(row.policy_id) || "Unknown policy";
+      return `Policy excerpt ${index + 1}\nPolicy: ${policyName}\nContent:\n${String(row.chunk_text || "").slice(0, POLICY_CONTEXT_CHARS_PER_EXCERPT)}`;
+    })
+    .join("\n\n");
+
 const fetchFocusedPolicyChunks = async ({ companyId, policyAreas = [], question, limit = 4 }) => {
   const policyIds = Array.from(
     new Set(
@@ -2385,7 +2433,7 @@ const fetchFocusedPolicyChunks = async ({ companyId, policyAreas = [], question,
 
   const { data, error } = await supabase
     .from("policy_chunks")
-    .select("id, policy_id, chunk_text")
+    .select("id, policy_id, document_id, chunk_text")
     .eq("company_id", companyId)
     .in("policy_id", policyIds)
     .limit(60);
@@ -2811,7 +2859,15 @@ app.get("/api/org/policies", requireOrgAccess, async (req, res) => {
       includeHidden: req.query.include_hidden === "1",
     });
     const stats = await getPolicyStats({ companyId: req.orgCompanyId, modules });
-    return res.json({ org: company, modules, stats });
+    // The display mode has to travel on this response: it decides what an
+    // employee sees, but /api/org/settings is manager-only, so the employee
+    // page cannot ask for it directly. Scoped to req.orgCompanyId like
+    // everything else here, so it can't leak across organizations.
+    return res.json({
+      org: { ...company, policy_display_mode: await getPolicyDisplayMode(req.orgCompanyId) },
+      modules,
+      stats,
+    });
   } catch (error) {
     console.error("Fetch org dashboard failed:", error);
     return res.status(500).send(IS_PRODUCTION ? "Failed to load organization policies." : error.message || "Failed to load organization policies.");
@@ -3676,6 +3732,40 @@ app.post("/api/org/people/invite-all", requireOrgManager, requireStandaloneEmplo
 // Org-level settings (currently just access_mode). Falls back to 'standalone'
 // if the access_mode column from schema.sql hasn't been applied yet.
 const VALID_ACCESS_MODES = new Set(["standalone", "hrms_link"]);
+// How the employee policy page presents itself. Orthogonal to access_mode:
+// that decides how people sign in, this decides what they see afterwards.
+const VALID_POLICY_DISPLAY_MODES = new Set(["module", "direct"]);
+const DEFAULT_POLICY_DISPLAY_MODE = "module";
+// Older databases may not have the column yet, and an org that has never been
+// switched has a null. Both mean "module" — never leave it undefined, or the
+// client has to guess.
+const toPolicyDisplayMode = (value) =>
+  VALID_POLICY_DISPLAY_MODES.has(value) ? value : DEFAULT_POLICY_DISPLAY_MODE;
+
+/**
+ * Read one org's display mode, tolerating a database that hasn't had the
+ * new column applied yet.
+ *
+ * Falling back to 'module' on *any* failure is deliberate: module view is
+ * the mode every existing organization is already on, so a missing column or
+ * a transient read error degrades to what people currently see rather than
+ * silently flipping an org into a UI its admin never chose.
+ */
+const getPolicyDisplayMode = async (companyId) => {
+  if (!companyId) return DEFAULT_POLICY_DISPLAY_MODE;
+  const { data, error } = await supabase
+    .from("companies")
+    .select("policy_display_mode")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingColumnError(error)) {
+      console.error("Load policy display mode failed:", error);
+    }
+    return DEFAULT_POLICY_DISPLAY_MODE;
+  }
+  return toPolicyDisplayMode(data?.policy_display_mode);
+};
 const toBrandingPayload = (company = {}) => ({
   theme_id: company?.theme_id || "default",
   logo_url: company?.logo_url || "",
@@ -3687,7 +3777,7 @@ const toBrandingPayload = (company = {}) => ({
 app.get("/api/org/settings", requireOrgManager, async (req, res) => {
   const { data, error } = await supabase
     .from("companies")
-    .select("access_mode, slug, name, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
+    .select("access_mode, policy_display_mode, slug, name, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
     .eq("id", req.orgCompanyId)
     .maybeSingle();
   if (error && !isMissingColumnError(error)) {
@@ -3696,6 +3786,7 @@ app.get("/api/org/settings", requireOrgManager, async (req, res) => {
   }
   return res.json({
     access_mode: data?.access_mode || "standalone",
+    policy_display_mode: toPolicyDisplayMode(data?.policy_display_mode),
     login_url: data?.slug ? buildOrgLoginUrl(req, data.slug, "index.html#login") : null,
     branding: toBrandingPayload(data),
   });
@@ -3707,6 +3798,13 @@ app.patch("/api/org/settings", requireOrgManager, async (req, res) => {
     return res.status(400).send("Invalid access_mode.");
   }
   const updates = { access_mode: mode };
+  if (req.body?.policy_display_mode !== undefined) {
+    const displayMode = sanitizeText(req.body.policy_display_mode);
+    if (!VALID_POLICY_DISPLAY_MODES.has(displayMode)) {
+      return res.status(400).send("Invalid policy_display_mode.");
+    }
+    updates.policy_display_mode = displayMode;
+  }
   if (req.body?.theme_id !== undefined) {
     const allowedThemes = new Set(["default", "sky", "sand", "mint", "midnight", "carbon"]);
     if (!allowedThemes.has(req.body.theme_id)) return res.status(400).send("Invalid theme.");
@@ -3728,13 +3826,13 @@ app.patch("/api/org/settings", requireOrgManager, async (req, res) => {
     .from("companies")
     .update(updates)
     .eq("id", req.orgCompanyId)
-    .select("access_mode, slug, name, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
+    .select("access_mode, policy_display_mode, slug, name, theme_id, logo_url, portal_name, login_background_color, login_background_image_url")
     .maybeSingle();
   if (error) {
     if (isMissingColumnError(error)) {
       return res
         .status(500)
-        .send("access_mode column missing. Run server/schema.sql in Supabase first.");
+        .send("A settings column is missing. Run server/schema.sql in Supabase first.");
     }
     console.error("Update settings failed:", error);
     return res.status(500).send(error.message || "Failed to update settings.");
@@ -3747,6 +3845,7 @@ app.patch("/api/org/settings", requireOrgManager, async (req, res) => {
   }
   return res.json({
     access_mode: data?.access_mode || mode,
+    policy_display_mode: toPolicyDisplayMode(data?.policy_display_mode ?? updates.policy_display_mode),
     login_url: data?.slug ? buildOrgLoginUrl(req, data.slug, "index.html#login") : null,
     branding: toBrandingPayload(data),
   });
@@ -4611,6 +4710,21 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     .filter((m) => m.text)
     .filter((m) => !(m.role === "assistant" && isBotFallbackText(m.text)));
   const previousTurns = history.slice(0, -1);
+  const ragDebug = {
+    question,
+    rewritten_query: null,
+    organization_id: req.orgCompanyId || null,
+    organization_filter: req.orgCompanyId ? { company_id: req.orgCompanyId } : null,
+    retrieval_query: null,
+    expanded_query: null,
+    embedding_model: GEMINI_EMBED_MODEL,
+    chat_model: GEMINI_CHAT_MODEL,
+    retrieved_chunks: [],
+    final_context: "",
+    final_prompt: "",
+    final_answer: "",
+    mode: "",
+  };
 
   // Daily quota gate. Super-admin is exempt (one user, used for testing).
   const userId = req.session?.user?.id;
@@ -4630,15 +4744,18 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     const modules = await fetchOrgDashboard(req.orgCompanyId, { ensureTemplate: true });
     const questionIntent = classifyQuestionContext(question);
     if (questionIntent === "policy_count") {
-      return res.json({
-        answer: await answerPolicyCountQuestion({
-          companyId: req.orgCompanyId,
-          question,
-          modules,
-        }),
+      const answer = await answerPolicyCountQuestion({
+        companyId: req.orgCompanyId,
+        question,
+        modules,
+      });
+      ragDebug.mode = "policy_count";
+      ragDebug.final_answer = answer;
+      return res.json(withRagDebug(req, {
+        answer,
         sources: [],
         mode: "policy_count",
-      });
+      }, ragDebug));
     }
 
     // "Which policies are uploaded / pending" → answer from the DB directly
@@ -4665,41 +4782,51 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         const lines = target.map((p) => `• ${p.name} (${p.module})`).join("\n");
         answer = `${target.length} ${target.length === 1 ? "policy is" : "policies are"} ${label}:\n${lines}`;
       }
-      return res.json({ answer, sources: [], mode: "policy_upload_status" });
+      ragDebug.mode = "policy_upload_status";
+      ragDebug.final_answer = answer;
+      return res.json(withRagDebug(req, { answer, sources: [], mode: "policy_upload_status" }, ragDebug));
     }
 
     const siteMapAnswer = (questionIntent === "navigation" || questionIntent === "policy_listing")
       ? answerSiteMapQuestion(question, modules)
       : "";
     if (siteMapAnswer) {
-      return res.json({
+      ragDebug.mode = "site_map";
+      ragDebug.final_answer = siteMapAnswer;
+      return res.json(withRagDebug(req, {
         answer: siteMapAnswer,
         sources: [],
         mode: "site_map",
-      });
+      }, ragDebug));
     }
     if (/^(hi|hello|hey|good morning|good afternoon|good evening)[!. ]*$/i.test(question.trim())) {
-      return res.json({
+      ragDebug.mode = "greeting";
+      ragDebug.final_answer = "Hi. Ask me about an uploaded HR policy.";
+      return res.json(withRagDebug(req, {
         answer: "Hi. Ask me about an uploaded HR policy.",
         sources: [],
         mode: "greeting",
-      });
+      }, ragDebug));
     }
 
     const policySearchStatus = await getOrgPolicySearchStatus(req.orgCompanyId);
     if (policySearchStatus === "no_uploaded_documents") {
-      return res.json({
+      ragDebug.mode = "no_uploaded_documents";
+      ragDebug.final_answer = "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Genie.";
+      return res.json(withRagDebug(req, {
         answer: "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Genie.",
         sources: [],
         mode: "no_uploaded_documents",
-      });
+      }, ragDebug));
     }
     if (policySearchStatus === "no_indexed_chunks") {
-      return res.json({
+      ragDebug.mode = "no_indexed_chunks";
+      ragDebug.final_answer = "Uploaded policy documents are not searchable yet. Re-upload them or check indexing.";
+      return res.json(withRagDebug(req, {
         answer: "Uploaded policy documents are not searchable yet. Re-upload them or check indexing.",
         sources: [],
         mode: "no_indexed_chunks",
-      });
+      }, ragDebug));
     }
 
     // Folding recent conversation into retrieval lets follow-ups
@@ -4712,6 +4839,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     const questionForRetrieval = priorTurn
       ? `${question}\nConversation context:\n${priorTurn.slice(0, 600)}`
       : question;
+    ragDebug.retrieval_query = questionForRetrieval;
     const indexVersion = await getPolicyIndexVersion(req.orgCompanyId);
     const questionHash = hashValue(`${CHAT_CACHE_VERSION}:${normalizeLookup(questionForRetrieval)}`);
     const cached = await getCachedAnswer({
@@ -4719,7 +4847,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       questionHash,
       indexVersion,
     });
-    if (cached) {
+    if (cached && !wantsRagDebug(req)) {
       return res.json({
         answer: cached.answer,
         sources: cached.sources || [],
@@ -4760,6 +4888,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       expandedQuestionParts.push(`Likely policy area: ${closestPolicyArea.policy.name} in ${closestPolicyArea.module.name}.`);
     }
     const expandedQuestion = expandedQuestionParts.join("\n");
+    ragDebug.expanded_query = expandedQuestion;
 
     const queryEmbedding = await embedText(expandedQuestion);
     if (!queryEmbedding.length) {
@@ -4788,6 +4917,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     if (CHAT_ENABLE_QUERY_REWRITE && (initialTopSim < 0.22 || filtered.length < 2)) {
       const rewrittenQuery = await rewriteQueryForRetrieval(question, modules);
       if (rewrittenQuery && rewrittenQuery.toLowerCase() !== question.trim().toLowerCase()) {
+        ragDebug.rewritten_query = rewrittenQuery;
         const rewriteEmbedding = await embedText(rewrittenQuery);
         if (rewriteEmbedding.length) {
           const { data: rewriteMatches, error: rewriteError } = await supabase.rpc("match_policy_chunks_hybrid", {
@@ -4821,36 +4951,79 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       limit: 12,
     });
     matches = filtered;
+    const documentIds = Array.from(new Set(filtered.map((row) => row.document_id).filter(Boolean)));
+    const documentById = new Map();
+    if (documentIds.length) {
+      const { data: docs, error: docsError } = await supabase
+        .from("policy_documents")
+        .select("id, file_path, display_name")
+        .eq("company_id", req.orgCompanyId)
+        .in("id", documentIds);
+      if (docsError) {
+        console.error("RAG debug document lookup failed:", docsError);
+      } else {
+        (docs || []).forEach((doc) => documentById.set(doc.id, doc));
+      }
+    }
+    ragDebug.retrieved_chunks = filtered.map((row, index) => {
+      const doc = documentById.get(row.document_id) || {};
+      return {
+        order: index + 1,
+        chunk_id: row.id,
+        document_id: row.document_id || null,
+        document_filename: doc.display_name || (doc.file_path ? doc.file_path.split("/").pop() : null),
+        file_path: doc.file_path || null,
+        policy_id: row.policy_id,
+        policy_name: policyNameById.get(row.policy_id) || null,
+        section_heading: null,
+        page_number: null,
+        similarity_score: row.similarity ?? null,
+        hybrid_score: row.hybrid_score ?? null,
+        evidence_score: row.evidence_score ?? null,
+        focused: row.focused === true,
+        chunk_text: row.chunk_text || "",
+      };
+    });
     if (!filtered.length) {
-      return res.json({
+      ragDebug.mode = "policy_no_evidence";
+      ragDebug.final_answer = "Not in the uploaded policies. Check with HR.";
+      return res.json(withRagDebug(req, {
         answer: "Not in the uploaded policies. Check with HR.",
         sources: [],
         mode: "policy_no_evidence",
-      });
+      }, ragDebug));
     }
+    const context = buildPolicyContextFromMatches({ matches: filtered, policyNameById, limit: 6 });
+    ragDebug.final_context = context;
     const directEntitlementAnswer = answerSimpleEntitlementFromMatches({ question, matches: filtered });
     if (directEntitlementAnswer) {
-      return res.json({
+      ragDebug.mode = "policy_entitlement_extract";
+      ragDebug.final_answer = directEntitlementAnswer;
+      return res.json(withRagDebug(req, {
         answer: directEntitlementAnswer,
         sources: filtered,
         mode: "policy_entitlement_extract",
-      });
+      }, ragDebug));
     }
     const directSanctionAnswer = answerSimpleSanctionFromMatches({ question, matches: filtered });
     if (directSanctionAnswer) {
-      return res.json({
+      ragDebug.mode = "policy_sanction_extract";
+      ragDebug.final_answer = directSanctionAnswer;
+      return res.json(withRagDebug(req, {
         answer: directSanctionAnswer,
         sources: filtered,
         mode: "policy_sanction_extract",
-      });
+      }, ragDebug));
     }
     const directCommitteeMembersAnswer = answerCommitteeMembersFromMatches({ question, matches: filtered });
     if (directCommitteeMembersAnswer) {
-      return res.json({
+      ragDebug.mode = "policy_committee_members_extract";
+      ragDebug.final_answer = directCommitteeMembersAnswer;
+      return res.json(withRagDebug(req, {
         answer: directCommitteeMembersAnswer,
         sources: filtered,
         mode: "policy_committee_members_extract",
-      });
+      }, ragDebug));
     }
     const directPolicySentenceAnswer = answerFromPolicySentences({
       question,
@@ -4859,30 +5032,28 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       intent: questionIntent,
     });
     if (directPolicySentenceAnswer) {
-      return res.json({
+      ragDebug.mode = "policy_sentence_extract";
+      ragDebug.final_answer = directPolicySentenceAnswer;
+      return res.json(withRagDebug(req, {
         answer: directPolicySentenceAnswer,
         sources: filtered,
         mode: "policy_sentence_extract",
-      });
+      }, ragDebug));
     }
-    const context = filtered
-      .slice(0, 6)
-      .map((row, index) => {
-        const policyName = policyNameById.get(row.policy_id) || "Unknown policy";
-        return `Policy excerpt ${index + 1}\nPolicy: ${policyName}\nContent:\n${row.chunk_text.slice(0, 650)}`;
-      })
-      .join("\n\n");
     const matchedPolicyAreas = summarizeMatchedPolicyAreas(filtered, modules);
 
     if (!context) {
-      return res.json({
-        answer: await buildClosestPolicyFallback({
+      const fallbackAnswer = await buildClosestPolicyFallback({
           companyId: req.orgCompanyId,
           question,
           modules,
-        }),
+        });
+      ragDebug.mode = "closest_policy_fallback";
+      ragDebug.final_answer = fallbackAnswer;
+      return res.json(withRagDebug(req, {
+        answer: fallbackAnswer,
         sources: [],
-      });
+      }, ragDebug));
     }
 
     const systemPrompt =
@@ -4907,6 +5078,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       ? history.map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.text}`).join("\n")
       : "";
     const prompt = `System:\n${systemPrompt}\n\nQuestion intent:\n${questionIntent}\nClosest policy area:\n${closestPolicyPath}\nMatched policy areas:\n${matchedPolicyAreas || "No matched policy areas."}\n\nPolicy content:\n${context || "None"}\n\nRecent conversation:\n${conversationBlock || "(none)"}\n\nQuestion:\n${question}\n\nAnswer:`;
+    ragDebug.final_prompt = prompt;
     let answer = "";
     let geminiSucceeded = false;
     let fallbackPolicySentenceAnswer = "";
@@ -4925,12 +5097,14 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         intent: questionIntent,
       });
       if (fallbackPolicySentenceAnswer) {
-        return res.json({
-          answer: fallbackPolicySentenceAnswer,
-          sources: filtered,
-          mode: "policy_sentence_extract",
-          ai_error: error?.status === 504 ? "ai_timeout" : "ai_unavailable",
-        });
+          ragDebug.mode = "policy_sentence_extract";
+          ragDebug.final_answer = fallbackPolicySentenceAnswer;
+          return res.json(withRagDebug(req, {
+            answer: fallbackPolicySentenceAnswer,
+            sources: filtered,
+            mode: "policy_sentence_extract",
+            ai_error: error?.status === 504 ? "ai_timeout" : "ai_unavailable",
+          }, ragDebug));
       }
       // Surface a clear "we're rate-limited" message rather than the generic
       // "not in policies" — they're different problems for the user.
@@ -4958,14 +5132,18 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         intent: questionIntent,
       });
       if (fallbackPolicySentenceAnswer) {
-        return res.json({
-          answer: fallbackPolicySentenceAnswer,
-          sources: filtered,
-          mode: "policy_sentence_extract",
-        });
+          ragDebug.mode = "policy_sentence_extract";
+          ragDebug.final_answer = fallbackPolicySentenceAnswer;
+          return res.json(withRagDebug(req, {
+            answer: fallbackPolicySentenceAnswer,
+            sources: filtered,
+            mode: "policy_sentence_extract",
+          }, ragDebug));
       }
     }
     answer = appendClosestPolicyContext({ answer, closestPolicyAreas });
+    ragDebug.mode = "rag_llm";
+    ragDebug.final_answer = answer;
 
     // Increment the per-user daily counter ONLY when Gemini actually billed us.
     // Site-map / policy-count answers and Gemini-error fallbacks don't count.
@@ -4989,12 +5167,12 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       });
     }
 
-    return res.json({
+    return res.json(withRagDebug(req, {
       answer: answer || "I could not find this in the uploaded policies. Please check with HR for confirmation.",
       sources: matches || [],
       ...(remaining !== null ? { remaining } : {}),
       ...(orgRemaining !== null ? { org_remaining: orgRemaining } : {}),
-    });
+    }, ragDebug));
   } catch (error) {
     console.error("Chat failed:", error);
     if (error?.status === 429) {

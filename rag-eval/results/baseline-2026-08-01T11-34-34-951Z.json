@@ -1,0 +1,4077 @@
+{
+  "generated_at": "2026-08-01T11:34:34.949Z",
+  "base_url": "http://127.0.0.1:5173",
+  "raw_base_url": "http://127.0.0.1:5173",
+  "rewrite_base_url": null,
+  "questions_file": "rag-eval/questions.json",
+  "summary": {
+    "total_questions": 95,
+    "answerable_questions": 83,
+    "unanswerable_questions": 12,
+    "raw_query_retrieval_accuracy": 0.12631578947368421,
+    "rewritten_query_retrieval_accuracy": null,
+    "retrieval_accuracy": 0.12631578947368421,
+    "answer_accuracy": 0,
+    "final_answer_accuracy": 0,
+    "unanswerable_accuracy": 0,
+    "hallucination_on_unanswerable_count": 12,
+    "hallucination_count": 12,
+    "unanswered_questions": 0,
+    "wrong_document_retrievals": 0,
+    "top_recurring_failure_categories": [
+      {
+        "category": "RETRIEVAL_FAILURE",
+        "count": 83
+      },
+      {
+        "category": "HALLUCINATION",
+        "count": 12
+      }
+    ],
+    "accuracy_by_query_style": {
+      "POLICY_LANGUAGE": {
+        "total": 26,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "LAZY_EMPLOYEE": {
+        "total": 62,
+        "retrieval_accuracy": 0.12903225806451613,
+        "answer_accuracy": 0
+      },
+      "FOLLOW_UP": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "UNANSWERABLE": {
+        "total": 4,
+        "retrieval_accuracy": 1,
+        "answer_accuracy": 0
+      }
+    },
+    "accuracy_by_canonical_id": {
+      "trio-posh-001": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-posh-002": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-posh-003": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-posh-004": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-posh-005": {
+        "total": 4,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-posh-006": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-posh-007": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-conduct-001": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-conduct-002": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-conduct-003": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-conduct-004": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-conduct-005": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-conduct-006": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-conduct-007": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-holiday-001": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-holiday-002": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-holiday-003": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-holiday-004": {
+        "total": 4,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-001": {
+        "total": 5,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-002": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-003": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-004": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-005": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-006": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-007": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-leave-008": {
+        "total": 3,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      },
+      "trio-unanswerable-001": {
+        "total": 3,
+        "retrieval_accuracy": 1,
+        "answer_accuracy": 0
+      },
+      "trio-unanswerable-002": {
+        "total": 3,
+        "retrieval_accuracy": 1,
+        "answer_accuracy": 0
+      },
+      "trio-unanswerable-003": {
+        "total": 3,
+        "retrieval_accuracy": 1,
+        "answer_accuracy": 0
+      },
+      "trio-unanswerable-004": {
+        "total": 3,
+        "retrieval_accuracy": 1,
+        "answer_accuracy": 0
+      },
+      "trio-holiday-list-full": {
+        "total": 1,
+        "retrieval_accuracy": 0,
+        "answer_accuracy": 0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "trio-posh-001",
+      "canonical_id": "trio-posh-001",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Who does the POSH policy apply to?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "The POSH policy applies to all employees of Trio Infrastructure Private Limited, including permanent, probationary, temporary, part-time, trainees, interns, consultants, and contractors.",
+      "required_fact_groups": [
+        [
+          "all employees"
+        ],
+        [
+          "permanent"
+        ],
+        [
+          "probationary"
+        ],
+        [
+          "temporary"
+        ],
+        [
+          "part-time",
+          "part time"
+        ],
+        [
+          "trainees",
+          "trainee"
+        ],
+        [
+          "interns",
+          "intern"
+        ],
+        [
+          "consultants",
+          "consultant"
+        ],
+        [
+          "contractors",
+          "contractor"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-001-lazy-1",
+      "canonical_id": "trio-posh-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "posh applies to whom",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "The POSH policy applies to all employees of Trio Infrastructure Private Limited, including permanent, probationary, temporary, part-time, trainees, interns, consultants, and contractors.",
+      "required_fact_groups": [
+        [
+          "all employees"
+        ],
+        [
+          "permanent"
+        ],
+        [
+          "probationary"
+        ],
+        [
+          "temporary"
+        ],
+        [
+          "part-time",
+          "part time"
+        ],
+        [
+          "trainees",
+          "trainee"
+        ],
+        [
+          "interns",
+          "intern"
+        ],
+        [
+          "consultants",
+          "consultant"
+        ],
+        [
+          "contractors",
+          "contractor"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-001-lazy-2",
+      "canonical_id": "trio-posh-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "contractor posh me apply?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "Contractors are covered by the POSH policy.",
+      "required_fact_groups": [
+        [
+          "yes",
+          "covered",
+          "applies",
+          "apply"
+        ],
+        [
+          "contractors",
+          "contractor"
+        ],
+        [
+          "POSH",
+          "sexual harassment"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-002",
+      "canonical_id": "trio-posh-002",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "How soon should I file a sexual harassment complaint?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "An aggrieved individual should file a written complaint within 90 days from the date of the last alleged incident.",
+      "required_fact_groups": [
+        [
+          "90"
+        ],
+        [
+          "days"
+        ],
+        [
+          "complaint"
+        ],
+        [
+          "last incident",
+          "last alleged incident"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-002-lazy-1",
+      "canonical_id": "trio-posh-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "posh complaint 90 days?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "An aggrieved individual should file a written complaint within 90 days from the date of the last alleged incident.",
+      "required_fact_groups": [
+        [
+          "90"
+        ],
+        [
+          "days"
+        ],
+        [
+          "complaint"
+        ],
+        [
+          "last incident",
+          "last alleged incident"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-002-lazy-2",
+      "canonical_id": "trio-posh-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "harassment complaint kab tak",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "An aggrieved individual should file a written complaint within 90 days from the date of the last alleged incident.",
+      "required_fact_groups": [
+        [
+          "90"
+        ],
+        [
+          "days"
+        ],
+        [
+          "complaint"
+        ],
+        [
+          "last incident",
+          "last alleged incident"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-003",
+      "canonical_id": "trio-posh-003",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Can I send a POSH complaint directly to the external IC member?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "If the aggrieved individual does not wish to file with the IC, they can send the complaint directly to the external IC member Kavita at thewayforward@kavitarathod.com.",
+      "required_fact_groups": [
+        [
+          "external"
+        ],
+        [
+          "Kavita"
+        ],
+        [
+          "thewayforward@kavitarathod.com"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-003-lazy-1",
+      "canonical_id": "trio-posh-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "posh complaint where",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "A POSH complaint may be sent to any IC member, or directly to external IC member Kavita at the listed email if the complainant does not wish to file with the IC.",
+      "required_fact_groups": [
+        [
+          "IC",
+          "Internal Committee",
+          "HR",
+          "external",
+          "Kavita",
+          "thewayforward@kavitarathod.com"
+        ],
+        [
+          "complaint"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-003-lazy-2",
+      "canonical_id": "trio-posh-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "ic nahi jana can mail kavita?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "If the aggrieved individual does not wish to file with the IC, they can send the complaint directly to the external IC member Kavita at thewayforward@kavitarathod.com.",
+      "required_fact_groups": [
+        [
+          "external"
+        ],
+        [
+          "Kavita"
+        ],
+        [
+          "thewayforward@kavitarathod.com"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-004",
+      "canonical_id": "trio-posh-004",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "What interim relief can the IC recommend during a POSH inquiry?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "At the complainant's written request, the IC may recommend transfer to another team or workplace, restriction on respondent reporting on complainant performance, paid leave up to 3 months in addition to entitled leave, or other relief to ensure a fair inquiry process.",
+      "required_fact_groups": [
+        [
+          "transfer"
+        ],
+        [
+          "restriction",
+          "respondent"
+        ],
+        [
+          "paid leave",
+          "leave"
+        ],
+        [
+          "3 months",
+          "three months"
+        ],
+        [
+          "interim"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-004-lazy-1",
+      "canonical_id": "trio-posh-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "posh interim relief kya milega",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "At the complainant's written request, the IC may recommend transfer to another team or workplace, restriction on respondent reporting on complainant performance, paid leave up to 3 months in addition to entitled leave, or other relief to ensure a fair inquiry process.",
+      "required_fact_groups": [
+        [
+          "transfer"
+        ],
+        [
+          "restriction",
+          "respondent"
+        ],
+        [
+          "paid leave",
+          "leave"
+        ],
+        [
+          "3 months",
+          "three months"
+        ],
+        [
+          "interim"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-004-lazy-2",
+      "canonical_id": "trio-posh-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "can i get leave during posh inquiry",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "Yes. At the complainant's written request, the IC may recommend paid leave up to 3 months during the POSH inquiry.",
+      "required_fact_groups": [
+        [
+          "yes",
+          "may",
+          "can"
+        ],
+        [
+          "paid leave",
+          "leave"
+        ],
+        [
+          "3 months",
+          "three months"
+        ],
+        [
+          "written request",
+          "request of the complainant",
+          "complainant"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-005",
+      "canonical_id": "trio-posh-005",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "How long does the IC have to complete a POSH inquiry?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "The policy states the IC must complete the inquiry within 90 working days from receipt of the complaint.",
+      "required_fact_groups": [
+        [
+          "90"
+        ],
+        [
+          "working days"
+        ],
+        [
+          "inquiry",
+          "investigation"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-005-lazy-1",
+      "canonical_id": "trio-posh-005",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "ic inquiry how many days",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "The policy states the IC must complete the inquiry within 90 working days from receipt of the complaint.",
+      "required_fact_groups": [
+        [
+          "90"
+        ],
+        [
+          "working days"
+        ],
+        [
+          "inquiry",
+          "investigation"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-005-lazy-2",
+      "canonical_id": "trio-posh-005",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "posh investigation timeline?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "The policy states the IC must complete the inquiry within 90 working days from receipt of the complaint.",
+      "required_fact_groups": [
+        [
+          "90"
+        ],
+        [
+          "working days"
+        ],
+        [
+          "inquiry",
+          "investigation"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-005-followup-1",
+      "canonical_id": "trio-posh-005",
+      "query_style": "FOLLOW_UP",
+      "question": "and appeal kab tak?",
+      "history": [
+        {
+          "role": "user",
+          "text": "How long does the IC have to complete a POSH inquiry?"
+        },
+        {
+          "role": "assistant",
+          "text": "The IC must complete the inquiry within 90 working days."
+        }
+      ],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "The complainant and respondent both have the right to appeal the decision within 90 days, as per Section 18 of the POSH Act.",
+      "required_fact_groups": [
+        [
+          "appeal"
+        ],
+        [
+          "90"
+        ],
+        [
+          "days"
+        ],
+        [
+          "Section 18",
+          "POSH Act"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-006",
+      "canonical_id": "trio-posh-006",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Who is the Presiding Officer of the SH-IC?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "Latasha Gupta, Front Desk Executive, is listed as Presiding Officer (Chairperson) of the SH-IC.",
+      "required_fact_groups": [
+        [
+          "Latasha Gupta"
+        ],
+        [
+          "Presiding Officer",
+          "Chairperson"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-006-lazy-1",
+      "canonical_id": "trio-posh-006",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "sh ic chairperson who",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "Latasha Gupta, Front Desk Executive, is listed as Presiding Officer (Chairperson) of the SH-IC.",
+      "required_fact_groups": [
+        [
+          "Latasha Gupta"
+        ],
+        [
+          "Presiding Officer",
+          "Chairperson"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-006-lazy-2",
+      "canonical_id": "trio-posh-006",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "latasha role in posh?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "Latasha Gupta, Front Desk Executive, is listed as Presiding Officer (Chairperson) of the SH-IC.",
+      "required_fact_groups": [
+        [
+          "Latasha Gupta"
+        ],
+        [
+          "Presiding Officer",
+          "Chairperson"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-007",
+      "canonical_id": "trio-posh-007",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Is lack of evidence enough to make a POSH complaint malicious?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "No. The policy states that lack of evidence alone does not make a complaint false or malicious.",
+      "required_fact_groups": [
+        [
+          "lack of evidence",
+          "not supported by sufficient evidence"
+        ],
+        [
+          "not false",
+          "not malicious",
+          "does not make"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-007-lazy-1",
+      "canonical_id": "trio-posh-007",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "no proof means false complaint?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "No. The policy states that lack of evidence alone does not make a complaint false or malicious.",
+      "required_fact_groups": [
+        [
+          "lack of evidence",
+          "not supported by sufficient evidence"
+        ],
+        [
+          "not false",
+          "not malicious",
+          "does not make"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-posh-007-lazy-2",
+      "canonical_id": "trio-posh-007",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "evidence nahi hai malicious?",
+      "history": [],
+      "expected_document": "POSH_Policy_TRIO.pdf",
+      "expected_section_or_fact": "No. The policy states that lack of evidence alone does not make a complaint false or malicious.",
+      "required_fact_groups": [
+        [
+          "lack of evidence",
+          "not supported by sufficient evidence"
+        ],
+        [
+          "not false",
+          "not malicious",
+          "does not make"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-001",
+      "canonical_id": "trio-conduct-001",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Does the Code of Conduct apply to interns and contractors?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "The Code applies to every employee, contractor, consultant, and associate, and specifically to full-time employees, part-time staff, interns, and third-party representatives acting on behalf of the Company.",
+      "required_fact_groups": [
+        [
+          "employee"
+        ],
+        [
+          "contractor"
+        ],
+        [
+          "consultant"
+        ],
+        [
+          "associate"
+        ],
+        [
+          "intern"
+        ],
+        [
+          "third-party",
+          "third party"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-001-lazy-1",
+      "canonical_id": "trio-conduct-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "code applies interns?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Yes. Interns are covered by the Code of Conduct.",
+      "required_fact_groups": [
+        [
+          "yes",
+          "applies",
+          "covered"
+        ],
+        [
+          "interns",
+          "intern"
+        ],
+        [
+          "Code",
+          "Conduct"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-001-lazy-2",
+      "canonical_id": "trio-conduct-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "contractor also code of conduct?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Yes. Contractors are covered by the Code of Conduct.",
+      "required_fact_groups": [
+        [
+          "yes",
+          "applies",
+          "covered"
+        ],
+        [
+          "contractors",
+          "contractor"
+        ],
+        [
+          "Code",
+          "Conduct"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-002",
+      "canonical_id": "trio-conduct-002",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "What is the limit for nominal gifts from clients or vendors?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Nominal gifts of token value under ₹500 in line with cultural norms are generally acceptable.",
+      "required_fact_groups": [
+        [
+          "500",
+          "₹500",
+          "Rs. 500",
+          "Rs 500"
+        ],
+        [
+          "under",
+          "below",
+          "less than"
+        ],
+        [
+          "gift",
+          "gifts"
+        ],
+        [
+          "nominal",
+          "token"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-002-lazy-1",
+      "canonical_id": "trio-conduct-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "gift limit?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Nominal gifts of token value under ₹500 in line with cultural norms are generally acceptable.",
+      "required_fact_groups": [
+        [
+          "500",
+          "₹500",
+          "Rs. 500",
+          "Rs 500"
+        ],
+        [
+          "under",
+          "below",
+          "less than"
+        ],
+        [
+          "gift",
+          "gifts"
+        ],
+        [
+          "nominal",
+          "token"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-002-lazy-2",
+      "canonical_id": "trio-conduct-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "vendor gift 500 ok?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Nominal gifts of token value under ₹500 in line with cultural norms are generally acceptable.",
+      "required_fact_groups": [
+        [
+          "500",
+          "₹500",
+          "Rs. 500",
+          "Rs 500"
+        ],
+        [
+          "under",
+          "below",
+          "less than"
+        ],
+        [
+          "gift",
+          "gifts"
+        ],
+        [
+          "nominal",
+          "token"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-003",
+      "canonical_id": "trio-conduct-003",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Who should I tell if I have a conflict of interest?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Employees must disclose personal, financial, or family relationships that may influence professional decisions to HR or their Reporting Manager.",
+      "required_fact_groups": [
+        [
+          "HR"
+        ],
+        [
+          "Reporting Manager",
+          "manager"
+        ],
+        [
+          "disclose",
+          "tell",
+          "report"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Organization context is required.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-003-lazy-1",
+      "canonical_id": "trio-conduct-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "conflict tell whom",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Conflicts should be disclosed to HR or the Reporting Manager.",
+      "required_fact_groups": [
+        [
+          "HR",
+          "Reporting Manager",
+          "manager"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-003-lazy-2",
+      "canonical_id": "trio-conduct-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "family relation disclose to who",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Employees must disclose personal, financial, or family relationships that may influence professional decisions to HR or their Reporting Manager.",
+      "required_fact_groups": [
+        [
+          "HR"
+        ],
+        [
+          "Reporting Manager",
+          "manager"
+        ],
+        [
+          "disclose",
+          "tell",
+          "report"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-004",
+      "canonical_id": "trio-conduct-004",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Who can approve a public statement or media communication on behalf of the company?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Media enquiries, press releases, or public statements on behalf of the Company must be approved by the Director before publication.",
+      "required_fact_groups": [
+        [
+          "Director"
+        ],
+        [
+          "approved",
+          "approval"
+        ],
+        [
+          "media",
+          "press",
+          "public statement"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-004-lazy-1",
+      "canonical_id": "trio-conduct-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "press statement approval",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Press statements or public communications on behalf of the company require Director approval.",
+      "required_fact_groups": [
+        [
+          "Director"
+        ],
+        [
+          "approval",
+          "approved"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-004-lazy-2",
+      "canonical_id": "trio-conduct-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "media query director approval?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Media enquiries, press releases, or public statements on behalf of the Company must be approved by the Director before publication.",
+      "required_fact_groups": [
+        [
+          "Director"
+        ],
+        [
+          "approved",
+          "approval"
+        ],
+        [
+          "media",
+          "press",
+          "public statement"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-005",
+      "canonical_id": "trio-conduct-005",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "If I see a safety issue at a project site, who do I report it to?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Unsafe conditions, near-misses, accidents, or injuries must be reported to the site supervisor or HR immediately.",
+      "required_fact_groups": [
+        [
+          "site supervisor",
+          "supervisor"
+        ],
+        [
+          "HR"
+        ],
+        [
+          "immediately"
+        ],
+        [
+          "unsafe",
+          "near-miss",
+          "accident",
+          "injury",
+          "safety"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-005-lazy-1",
+      "canonical_id": "trio-conduct-005",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "site accident report whom",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Site accidents or unsafe conditions must be reported to the site supervisor or HR.",
+      "required_fact_groups": [
+        [
+          "site supervisor",
+          "supervisor",
+          "HR"
+        ],
+        [
+          "accident",
+          "injury",
+          "unsafe",
+          "near-miss",
+          "safety"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-005-lazy-2",
+      "canonical_id": "trio-conduct-005",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "unsafe condition bolna kisko",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Unsafe conditions must be reported to the site supervisor or HR.",
+      "required_fact_groups": [
+        [
+          "site supervisor",
+          "supervisor",
+          "HR"
+        ],
+        [
+          "unsafe",
+          "safety",
+          "condition"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-006",
+      "canonical_id": "trio-conduct-006",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "What disciplinary actions can happen for Code of Conduct violations?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Disciplinary measures may include verbal or written warning, suspension with or without pay pending investigation, forfeiture of benefits/incentives/accrued entitlements, termination for serious or repeated violations, or legal action for criminal conduct or significant financial loss.",
+      "required_fact_groups": [
+        [
+          "warning"
+        ],
+        [
+          "suspension"
+        ],
+        [
+          "forfeiture",
+          "benefits",
+          "incentives",
+          "entitlements"
+        ],
+        [
+          "termination"
+        ],
+        [
+          "legal action"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-006-lazy-1",
+      "canonical_id": "trio-conduct-006",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "conduct violation punishment",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Code violations can attract disciplinary action depending on severity, such as warning, suspension, termination, forfeiture, or legal action.",
+      "required_fact_groups": [
+        [
+          "disciplinary",
+          "action",
+          "punishment",
+          "warning",
+          "suspension",
+          "termination",
+          "legal action"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-006-lazy-2",
+      "canonical_id": "trio-conduct-006",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "code break what action",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Breaking the Code can lead to disciplinary action, including warning, suspension, termination, forfeiture, or legal action depending on severity.",
+      "required_fact_groups": [
+        [
+          "disciplinary",
+          "action",
+          "warning",
+          "suspension",
+          "termination",
+          "legal action"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-007",
+      "canonical_id": "trio-conduct-007",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Can I install software on company systems if it helps me work faster?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Unauthorised installation of software, sharing login credentials, or access to restricted systems is prohibited.",
+      "required_fact_groups": [
+        [
+          "unauthorised",
+          "unauthorized",
+          "not allowed",
+          "prohibited"
+        ],
+        [
+          "software"
+        ],
+        [
+          "installation",
+          "install"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-007-lazy-1",
+      "canonical_id": "trio-conduct-007",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "can install software laptop",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Unauthorised installation of software, sharing login credentials, or access to restricted systems is prohibited.",
+      "required_fact_groups": [
+        [
+          "unauthorised",
+          "unauthorized",
+          "not allowed",
+          "prohibited"
+        ],
+        [
+          "software"
+        ],
+        [
+          "installation",
+          "install"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-conduct-007-lazy-2",
+      "canonical_id": "trio-conduct-007",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "software install allowed?",
+      "history": [],
+      "expected_document": "Code_of_Conduct_Trio.docx",
+      "expected_section_or_fact": "Unauthorised installation of software, sharing login credentials, or access to restricted systems is prohibited.",
+      "required_fact_groups": [
+        [
+          "unauthorised",
+          "unauthorized",
+          "not allowed",
+          "prohibited"
+        ],
+        [
+          "software"
+        ],
+        [
+          "installation",
+          "install"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-001",
+      "canonical_id": "trio-holiday-001",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "How many holidays are listed for 2026?",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "The 2026 holiday list contains 10 holidays.",
+      "required_fact_groups": [
+        [
+          "10"
+        ],
+        [
+          "holidays",
+          "holiday"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-001-lazy-1",
+      "canonical_id": "trio-holiday-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "holiday list",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Return the actual 2026 holiday list: Republic Day — 26-Jan-26; Holi — 03-Mar-26; Maharashtra Day — 01-May-26; Independence Day — 15-Aug-26; Ganesh Chaturthi — 14-Sep-26; Mahatma Gandhi Jayanti — 02-Oct-26; Dussehra — 20-Oct-26; Diwali-Govardhan Puja — 09-Nov-26; Diwali-Balipratipada/Bhai Dooj — 10-Nov-26; Christmas — 25-Dec-26.",
+      "required_fact_groups": [
+        [
+          "Republic Day"
+        ],
+        [
+          "26-Jan-26",
+          "26 Jan"
+        ],
+        [
+          "Holi"
+        ],
+        [
+          "03-Mar-26",
+          "03 Mar"
+        ],
+        [
+          "Maharashtra Day"
+        ],
+        [
+          "01-May-26",
+          "01 May"
+        ],
+        [
+          "Independence Day"
+        ],
+        [
+          "15-Aug-26",
+          "15 Aug"
+        ],
+        [
+          "Ganesh Chaturthi"
+        ],
+        [
+          "14-Sep-26",
+          "14 Sep"
+        ],
+        [
+          "Mahatma Gandhi Jayanti"
+        ],
+        [
+          "02-Oct-26",
+          "02 Oct"
+        ],
+        [
+          "Dussehra"
+        ],
+        [
+          "20-Oct-26",
+          "20 Oct"
+        ],
+        [
+          "Diwali-Govardhan Puja"
+        ],
+        [
+          "09-Nov-26",
+          "09 Nov",
+          "9 Nov"
+        ],
+        [
+          "Diwali-Balipratipada/Bhai Dooj",
+          "Balipratipada",
+          "Bhai Dooj"
+        ],
+        [
+          "10-Nov-26",
+          "10 Nov"
+        ],
+        [
+          "Christmas"
+        ],
+        [
+          "25-Dec-26",
+          "25 Dec"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-001-lazy-2",
+      "canonical_id": "trio-holiday-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "how many holiday 2026",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "The 2026 holiday list contains 10 holidays.",
+      "required_fact_groups": [
+        [
+          "10"
+        ],
+        [
+          "holidays",
+          "holiday"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-002",
+      "canonical_id": "trio-holiday-002",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "What date is Ganesh Chaturthi holiday in 2026?",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Ganesh Chaturthi is listed on 14-Sep-26, Monday, in September.",
+      "required_fact_groups": [
+        [
+          "Ganesh Chaturthi",
+          "Ganpati"
+        ],
+        [
+          "14-Sep-26",
+          "14 Sep",
+          "14 September"
+        ],
+        [
+          "Monday"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-002-lazy-1",
+      "canonical_id": "trio-holiday-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "ganesh chaturthi off when",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Ganesh Chaturthi is listed on 14-Sep-26, Monday, in September.",
+      "required_fact_groups": [
+        [
+          "Ganesh Chaturthi",
+          "Ganpati"
+        ],
+        [
+          "14-Sep-26",
+          "14 Sep",
+          "14 September"
+        ],
+        [
+          "Monday"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-002-lazy-2",
+      "canonical_id": "trio-holiday-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "ganpati holiday date",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Ganesh Chaturthi is listed on 14-Sep-26, Monday, in September.",
+      "required_fact_groups": [
+        [
+          "Ganesh Chaturthi",
+          "Ganpati"
+        ],
+        [
+          "14-Sep-26",
+          "14 Sep",
+          "14 September"
+        ],
+        [
+          "Monday"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-003",
+      "canonical_id": "trio-holiday-003",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Are site-based employees always off on public holidays?",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "No. Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+      "required_fact_groups": [
+        [
+          "site-based",
+          "site based",
+          "site"
+        ],
+        [
+          "may be required to work",
+          "required to work",
+          "work on public holidays"
+        ],
+        [
+          "Comp-Off",
+          "Compensatory Off",
+          "comp off"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-003-lazy-1",
+      "canonical_id": "trio-holiday-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "site public holiday work?",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "No. Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+      "required_fact_groups": [
+        [
+          "site-based",
+          "site based",
+          "site"
+        ],
+        [
+          "may be required to work",
+          "required to work",
+          "work on public holidays"
+        ],
+        [
+          "Comp-Off",
+          "Compensatory Off",
+          "comp off"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-003-lazy-2",
+      "canonical_id": "trio-holiday-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "public holiday site employee comp off?",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "No. Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+      "required_fact_groups": [
+        [
+          "site-based",
+          "site based",
+          "site"
+        ],
+        [
+          "may be required to work",
+          "required to work",
+          "work on public holidays"
+        ],
+        [
+          "Comp-Off",
+          "Compensatory Off",
+          "comp off"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-004",
+      "canonical_id": "trio-holiday-004",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Which Diwali holidays are listed in 2026?",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Diwali-Govardhan Puja is listed on 09-Nov-26, Monday, and Diwali-Balipratipada/Bhai Dooj is listed on 10-Nov-26, Tuesday.",
+      "required_fact_groups": [
+        [
+          "Diwali-Govardhan Puja",
+          "Govardhan"
+        ],
+        [
+          "09-Nov-26",
+          "9 Nov",
+          "09 Nov"
+        ],
+        [
+          "Diwali-Balipratipada/Bhai Dooj",
+          "Balipratipada",
+          "Bhai Dooj"
+        ],
+        [
+          "10-Nov-26",
+          "10 Nov"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-004-lazy-1",
+      "canonical_id": "trio-holiday-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "diwali off when",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Diwali-Govardhan Puja is listed on 09-Nov-26, Monday, and Diwali-Balipratipada/Bhai Dooj is listed on 10-Nov-26, Tuesday.",
+      "required_fact_groups": [
+        [
+          "Diwali-Govardhan Puja",
+          "Govardhan"
+        ],
+        [
+          "09-Nov-26",
+          "9 Nov",
+          "09 Nov"
+        ],
+        [
+          "Diwali-Balipratipada/Bhai Dooj",
+          "Balipratipada",
+          "Bhai Dooj"
+        ],
+        [
+          "10-Nov-26",
+          "10 Nov"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-004-lazy-2",
+      "canonical_id": "trio-holiday-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "diwali holidays 2026 dates",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Diwali-Govardhan Puja is listed on 09-Nov-26, Monday, and Diwali-Balipratipada/Bhai Dooj is listed on 10-Nov-26, Tuesday.",
+      "required_fact_groups": [
+        [
+          "Diwali-Govardhan Puja",
+          "Govardhan"
+        ],
+        [
+          "09-Nov-26",
+          "9 Nov",
+          "09 Nov"
+        ],
+        [
+          "Diwali-Balipratipada/Bhai Dooj",
+          "Balipratipada",
+          "Bhai Dooj"
+        ],
+        [
+          "10-Nov-26",
+          "10 Nov"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-004-followup-1",
+      "canonical_id": "trio-holiday-004",
+      "query_style": "FOLLOW_UP",
+      "question": "and site people if they work?",
+      "history": [
+        {
+          "role": "user",
+          "text": "Which Diwali holidays are listed in 2026?"
+        },
+        {
+          "role": "assistant",
+          "text": "Diwali-Govardhan Puja is on 09-Nov-26 and Diwali-Balipratipada/Bhai Dooj is on 10-Nov-26."
+        }
+      ],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+      "required_fact_groups": [
+        [
+          "site-based",
+          "site based",
+          "site"
+        ],
+        [
+          "may be required to work",
+          "required to work",
+          "work"
+        ],
+        [
+          "Comp-Off",
+          "Compensatory Off",
+          "comp off"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-001",
+      "canonical_id": "trio-leave-001",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "How much annual leave do confirmed employees get?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Confirmed employees are entitled to 18 working days of Annual Leave per year.",
+      "required_fact_groups": [
+        [
+          "18"
+        ],
+        [
+          "working days"
+        ],
+        [
+          "Annual Leave",
+          "AL"
+        ],
+        [
+          "confirmed employees",
+          "confirmed"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-001-lazy-1",
+      "canonical_id": "trio-leave-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "how many leaves",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Employees get 18 working days of Annual Leave per year.",
+      "required_fact_groups": [
+        [
+          "18"
+        ],
+        [
+          "working days"
+        ],
+        [
+          "Annual Leave",
+          "AL",
+          "leave"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-001-lazy-2",
+      "canonical_id": "trio-leave-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "annual leave kitna",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Confirmed employees are entitled to 18 working days of Annual Leave per year.",
+      "required_fact_groups": [
+        [
+          "18"
+        ],
+        [
+          "working days"
+        ],
+        [
+          "Annual Leave",
+          "AL"
+        ],
+        [
+          "confirmed employees",
+          "confirmed"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-001-followup-1",
+      "canonical_id": "trio-leave-001",
+      "query_style": "FOLLOW_UP",
+      "question": "what about probation?",
+      "history": [
+        {
+          "role": "user",
+          "text": "How much annual leave do confirmed employees get?"
+        },
+        {
+          "role": "assistant",
+          "text": "Confirmed employees get 18 working days of Annual Leave per year."
+        }
+      ],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+      "required_fact_groups": [
+        [
+          "probation"
+        ],
+        [
+          "not permitted",
+          "not allowed",
+          "cannot"
+        ],
+        [
+          "accrue",
+          "continues to accrue"
+        ],
+        [
+          "confirmation",
+          "confirmed"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-002",
+      "canonical_id": "trio-leave-002",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Do I get leave during probation?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+      "required_fact_groups": [
+        [
+          "probation"
+        ],
+        [
+          "not permitted",
+          "not allowed",
+          "cannot"
+        ],
+        [
+          "accrue",
+          "continues to accrue"
+        ],
+        [
+          "confirmation",
+          "confirmed"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-002-lazy-1",
+      "canonical_id": "trio-leave-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "probation leave allowed?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+      "required_fact_groups": [
+        [
+          "probation"
+        ],
+        [
+          "not permitted",
+          "not allowed",
+          "cannot"
+        ],
+        [
+          "accrue",
+          "continues to accrue"
+        ],
+        [
+          "confirmation",
+          "confirmed"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-002-lazy-2",
+      "canonical_id": "trio-leave-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "new joiner can take leave?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+      "required_fact_groups": [
+        [
+          "probation"
+        ],
+        [
+          "not permitted",
+          "not allowed",
+          "cannot"
+        ],
+        [
+          "accrue",
+          "continues to accrue"
+        ],
+        [
+          "confirmation",
+          "confirmed"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-003",
+      "canonical_id": "trio-leave-003",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "How many annual leave days can I carry forward after 31 March?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Employees may carry forward a maximum of 5 unutilised Annual Leave days to the next year; any balance above 5 lapses automatically on 31 March.",
+      "required_fact_groups": [
+        [
+          "5"
+        ],
+        [
+          "carry forward",
+          "carried-forward"
+        ],
+        [
+          "Annual Leave",
+          "AL"
+        ],
+        [
+          "31 March",
+          "31st March"
+        ],
+        [
+          "lapse",
+          "laps"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-003-lazy-1",
+      "canonical_id": "trio-leave-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "al carry forward max",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Employees may carry forward a maximum of 5 unutilised Annual Leave days to the next year; any balance above 5 lapses automatically on 31 March.",
+      "required_fact_groups": [
+        [
+          "5"
+        ],
+        [
+          "carry forward",
+          "carried-forward"
+        ],
+        [
+          "Annual Leave",
+          "AL"
+        ],
+        [
+          "31 March",
+          "31st March"
+        ],
+        [
+          "lapse",
+          "laps"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-003-lazy-2",
+      "canonical_id": "trio-leave-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "5 leaves carry forward?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Yes. Up to 5 Annual Leave days can be carried forward.",
+      "required_fact_groups": [
+        [
+          "yes",
+          "can",
+          "may"
+        ],
+        [
+          "5"
+        ],
+        [
+          "carry forward"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-004",
+      "canonical_id": "trio-leave-004",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "If a weekly off or fixed holiday falls between my annual leave dates, is it counted as annual leave?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "No. Leave is counted on the working day principle, and an intermediate Weekly Off or Fixed Holiday sandwiched between AL dates will not be treated as AL.",
+      "required_fact_groups": [
+        [
+          "Weekly Off",
+          "weekly off"
+        ],
+        [
+          "Fixed Holiday",
+          "holiday"
+        ],
+        [
+          "not treated as AL",
+          "not counted",
+          "will not be treated"
+        ],
+        [
+          "working day principle",
+          "sandwiched"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-004-lazy-1",
+      "canonical_id": "trio-leave-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "holiday between leave counted?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "A fixed holiday between Annual Leave dates is not counted as Annual Leave.",
+      "required_fact_groups": [
+        [
+          "holiday"
+        ],
+        [
+          "not counted",
+          "not treated",
+          "will not be treated"
+        ],
+        [
+          "Annual Leave",
+          "AL",
+          "leave"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-004-lazy-2",
+      "canonical_id": "trio-leave-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "weekly off sandwich al count?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "A weekly off sandwiched between AL dates is not counted as AL.",
+      "required_fact_groups": [
+        [
+          "weekly off"
+        ],
+        [
+          "not counted",
+          "not treated",
+          "will not be treated"
+        ],
+        [
+          "Annual Leave",
+          "AL"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-005",
+      "canonical_id": "trio-leave-005",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "How much maternity leave is available for the first two surviving children?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Eligible female employees are entitled to 26 weeks of paid maternity leave for the first two surviving children.",
+      "required_fact_groups": [
+        [
+          "26"
+        ],
+        [
+          "weeks"
+        ],
+        [
+          "maternity leave"
+        ],
+        [
+          "first two",
+          "2 surviving children",
+          "two surviving children"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-005-lazy-1",
+      "canonical_id": "trio-leave-005",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "maternity leave weeks",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Eligible female employees are entitled to 26 weeks of paid maternity leave for the first two surviving children.",
+      "required_fact_groups": [
+        [
+          "26"
+        ],
+        [
+          "weeks"
+        ],
+        [
+          "maternity leave"
+        ],
+        [
+          "first two",
+          "2 surviving children",
+          "two surviving children"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-005-lazy-2",
+      "canonical_id": "trio-leave-005",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "first baby maternity kitna",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "For the first child, eligible employees get 26 weeks of paid maternity leave.",
+      "required_fact_groups": [
+        [
+          "26"
+        ],
+        [
+          "weeks"
+        ],
+        [
+          "maternity"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-006",
+      "canonical_id": "trio-leave-006",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "What is the eligibility requirement for maternity leave?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Eligibility requires at least 80 days of actual service with the Company in the 12 months immediately preceding the expected delivery date.",
+      "required_fact_groups": [
+        [
+          "80"
+        ],
+        [
+          "days"
+        ],
+        [
+          "12 months"
+        ],
+        [
+          "expected date of delivery",
+          "delivery date"
+        ],
+        [
+          "actual service"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-006-lazy-1",
+      "canonical_id": "trio-leave-006",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "maternity eligibility",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Eligibility requires at least 80 days of actual service with the Company in the 12 months immediately preceding the expected delivery date.",
+      "required_fact_groups": [
+        [
+          "80"
+        ],
+        [
+          "days"
+        ],
+        [
+          "12 months"
+        ],
+        [
+          "expected date of delivery",
+          "delivery date"
+        ],
+        [
+          "actual service"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-006-lazy-2",
+      "canonical_id": "trio-leave-006",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "80 days maternity rule?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Eligibility requires at least 80 days of actual service with the Company in the 12 months immediately preceding the expected delivery date.",
+      "required_fact_groups": [
+        [
+          "80"
+        ],
+        [
+          "days"
+        ],
+        [
+          "12 months"
+        ],
+        [
+          "expected date of delivery",
+          "delivery date"
+        ],
+        [
+          "actual service"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-007",
+      "canonical_id": "trio-leave-007",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "How many late arrivals or missed punch-ins become one day of annual leave?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Three instances of missed punch-ins or three instances of late arrivals beyond the flexibility period, or a combination totaling three in a month, count as one day of Annual Leave; without leave balance, the day is treated as LOP.",
+      "required_fact_groups": [
+        [
+          "3"
+        ],
+        [
+          "late arrivals",
+          "late"
+        ],
+        [
+          "missed punch-ins",
+          "missed punch"
+        ],
+        [
+          "1",
+          "one"
+        ],
+        [
+          "Annual Leave",
+          "AL",
+          "LOP"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-007-lazy-1",
+      "canonical_id": "trio-leave-007",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "late 3 times?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Three late arrivals in a month count as one day of Annual Leave; if no leave balance is available, it is treated as LOP.",
+      "required_fact_groups": [
+        [
+          "3"
+        ],
+        [
+          "late"
+        ],
+        [
+          "1",
+          "one"
+        ],
+        [
+          "Annual Leave",
+          "AL",
+          "LOP"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-007-lazy-2",
+      "canonical_id": "trio-leave-007",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "3 missed punch lop?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Three missed punch-ins in a month count as one day of Annual Leave; if no leave balance is available, it is treated as LOP.",
+      "required_fact_groups": [
+        [
+          "3"
+        ],
+        [
+          "missed punch",
+          "missed punch-ins"
+        ],
+        [
+          "1",
+          "one"
+        ],
+        [
+          "Annual Leave",
+          "AL",
+          "LOP"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-008",
+      "canonical_id": "trio-leave-008",
+      "query_style": "POLICY_LANGUAGE",
+      "question": "Can I take annual leave during my notice period?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "During notice period, Annual Leave or Comp-Off is subject to prior approval of the Reporting Manager and HR; leave without explicit approval extends the notice period by equivalent days unless waived by Management.",
+      "required_fact_groups": [
+        [
+          "notice period"
+        ],
+        [
+          "Annual Leave",
+          "AL",
+          "Comp-Off",
+          "comp off"
+        ],
+        [
+          "Reporting Manager",
+          "manager"
+        ],
+        [
+          "HR"
+        ],
+        [
+          "approval",
+          "prior approval"
+        ],
+        [
+          "extension",
+          "extend"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-008-lazy-1",
+      "canonical_id": "trio-leave-008",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "can i take al notice period",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Annual Leave during notice period requires prior approval from the Reporting Manager and HR.",
+      "required_fact_groups": [
+        [
+          "notice period"
+        ],
+        [
+          "Annual Leave",
+          "AL"
+        ],
+        [
+          "Reporting Manager",
+          "manager"
+        ],
+        [
+          "HR"
+        ],
+        [
+          "approval",
+          "prior approval"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-008-lazy-2",
+      "canonical_id": "trio-leave-008",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "notice period leave approval?",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Leave during notice period requires prior approval from the Reporting Manager and HR.",
+      "required_fact_groups": [
+        [
+          "notice period"
+        ],
+        [
+          "leave",
+          "Annual Leave",
+          "AL",
+          "Comp-Off",
+          "comp off"
+        ],
+        [
+          "Reporting Manager",
+          "manager"
+        ],
+        [
+          "HR"
+        ],
+        [
+          "approval",
+          "prior approval"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-001",
+      "canonical_id": "trio-unanswerable-001",
+      "query_style": "UNANSWERABLE",
+      "question": "What is Trio infra's work from home policy for employees?",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-001-lazy-1",
+      "canonical_id": "trio-unanswerable-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "wfh policy",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-001-lazy-2",
+      "canonical_id": "trio-unanswerable-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "remote work allowed?",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-002",
+      "canonical_id": "trio-unanswerable-002",
+      "query_style": "UNANSWERABLE",
+      "question": "How much internet reimbursement can I claim each month?",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-002-lazy-1",
+      "canonical_id": "trio-unanswerable-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "internet reimbursement",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-002-lazy-2",
+      "canonical_id": "trio-unanswerable-002",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "wifi bill claim kitna",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-003",
+      "canonical_id": "trio-unanswerable-003",
+      "query_style": "UNANSWERABLE",
+      "question": "How many sick leave days do employees get?",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-003-lazy-1",
+      "canonical_id": "trio-unanswerable-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "sick leave kitna",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-003-lazy-2",
+      "canonical_id": "trio-unanswerable-003",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "how many sl",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-004",
+      "canonical_id": "trio-unanswerable-004",
+      "query_style": "UNANSWERABLE",
+      "question": "What is the official travel allowance for site visits?",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-004-lazy-1",
+      "canonical_id": "trio-unanswerable-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "site travel allowance",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-unanswerable-004-lazy-2",
+      "canonical_id": "trio-unanswerable-004",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "travel claim for site visit?",
+      "history": [],
+      "expected_document": "",
+      "expected_section_or_fact": "",
+      "required_fact_groups": [],
+      "should_answer": false,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": true,
+      "final_context_pass": true,
+      "retrieval_pass": true,
+      "answer_pass": false,
+      "failure_category": "HALLUCINATION",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": true,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-holiday-list-regression-001",
+      "canonical_id": "trio-holiday-list-full",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "what is in holiday list",
+      "history": [],
+      "expected_document": "Holiday List.pdf",
+      "expected_section_or_fact": "Return the actual 2026 holiday list: Republic Day — 26-Jan-26; Holi — 03-Mar-26; Maharashtra Day — 01-May-26; Independence Day — 15-Aug-26; Ganesh Chaturthi — 14-Sep-26; Mahatma Gandhi Jayanti — 02-Oct-26; Dussehra — 20-Oct-26; Diwali-Govardhan Puja — 09-Nov-26; Diwali-Balipratipada/Bhai Dooj — 10-Nov-26; Christmas — 25-Dec-26.",
+      "required_fact_groups": [
+        [
+          "Republic Day"
+        ],
+        [
+          "26-Jan-26",
+          "26 Jan"
+        ],
+        [
+          "Holi"
+        ],
+        [
+          "03-Mar-26",
+          "03 Mar"
+        ],
+        [
+          "Maharashtra Day"
+        ],
+        [
+          "01-May-26",
+          "01 May"
+        ],
+        [
+          "Independence Day"
+        ],
+        [
+          "15-Aug-26",
+          "15 Aug"
+        ],
+        [
+          "Ganesh Chaturthi"
+        ],
+        [
+          "14-Sep-26",
+          "14 Sep"
+        ],
+        [
+          "Mahatma Gandhi Jayanti"
+        ],
+        [
+          "02-Oct-26",
+          "02 Oct"
+        ],
+        [
+          "Dussehra"
+        ],
+        [
+          "20-Oct-26",
+          "20 Oct"
+        ],
+        [
+          "Diwali-Govardhan Puja"
+        ],
+        [
+          "09-Nov-26",
+          "09 Nov",
+          "9 Nov"
+        ],
+        [
+          "Diwali-Balipratipada/Bhai Dooj",
+          "Balipratipada",
+          "Bhai Dooj"
+        ],
+        [
+          "10-Nov-26",
+          "10 Nov"
+        ],
+        [
+          "Christmas"
+        ],
+        [
+          "25-Dec-26",
+          "25 Dec"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    },
+    {
+      "id": "trio-leave-annual-leaves-regression-001",
+      "canonical_id": "trio-leave-001",
+      "query_style": "LAZY_EMPLOYEE",
+      "question": "how many Annual leaves",
+      "history": [],
+      "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+      "expected_section_or_fact": "Confirmed employees are entitled to 18 working days of Annual Leave per year.",
+      "required_fact_groups": [
+        [
+          "18"
+        ],
+        [
+          "working days"
+        ],
+        [
+          "Annual Leave",
+          "AL",
+          "leave"
+        ],
+        [
+          "confirmed employees",
+          "confirmed"
+        ]
+      ],
+      "should_answer": true,
+      "retrieved_documents": [],
+      "retrieved_chunks": [],
+      "retrieval_scores": [],
+      "generated_answer": "Too many chat requests. Please slow down.",
+      "raw_retrieval_candidate_pass": false,
+      "final_context_pass": false,
+      "retrieval_pass": false,
+      "answer_pass": false,
+      "failure_category": "RETRIEVAL_FAILURE",
+      "notes": "",
+      "debug": null,
+      "raw_query_retrieval_pass": false,
+      "rewritten_query_retrieval_pass": null,
+      "final_answer_correct": false,
+      "rewritten_query_result": null
+    }
+  ]
+}

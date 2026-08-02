@@ -135,6 +135,62 @@ const appendMessage = (container, text, variant, options = {}) => {
 const CHAT_STORAGE_PREFIX = "policy-chat-history-v5";
 let activeChatStorageKey = `${CHAT_STORAGE_PREFIX}:${window.location.hostname || "local"}`;
 
+/**
+ * Ask Genie a question.
+ *
+ * The single call site for /api/chat, shared by the floating assistant and
+ * the Direct Policy View workspace. Retrieval, prompting and answer
+ * generation all live server-side and are untouched by either surface —
+ * these two differ only in how the answer is presented.
+ */
+export const askGenie = async ({ question, history = [] }) => {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ question, history }),
+  });
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    const payload = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : null;
+    const message = payload?.answer || payload?.message || (await response.text());
+    throw new Error(message || "Unable to answer right now.");
+  }
+  const data = await response.json();
+  return cleanBotMessage(data?.answer || "I don't have enough information to answer that.");
+};
+
+export { cleanBotMessage, toApiHistory, saveChatHistory };
+
+/**
+ * History for the Direct View workspace.
+ *
+ * Same localStorage record as the floating assistant, so a conversation
+ * survives switching display modes — but without the "Hi! How can I help
+ * you?" seed. The workspace has a designed empty state; a greeting bubble
+ * would mean it never gets shown.
+ */
+export const loadGenieConversation = () => {
+  const history = loadChatHistory();
+  if (history.length === 1 && history[0]?.variant === "bot" && /^Hi! How can I help/.test(history[0].text)) {
+    return [];
+  }
+  return history;
+};
+
+/**
+ * Resolve the per-organization storage key, then hand back that org's
+ * history. Until this settles the key is hostname-based, which is already
+ * org-scoped on subdomains; this pins it to the company id.
+ */
+export const syncGenieStorage = async () => {
+  const key = await resolveChatStorageKey();
+  if (key && key !== activeChatStorageKey) activeChatStorageKey = key;
+  return loadGenieConversation();
+};
+
 const resolveChatStorageKey = async () => {
   try {
     const response = await fetch("/api/session", { credentials: "include" });
