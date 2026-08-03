@@ -57,14 +57,14 @@ export const flattenPolicies = (modules = []) => {
     (module.policies || []).forEach((policy) => {
       if (!policy?.id || seen.has(policy.id)) return;
       seen.add(policy.id);
-      out.push({ id: policy.id, name: policy.name || "Untitled policy" });
+      out.push({ id: policy.id, name: policy.name || "Untitled policy", position: Number(policy.position || 0) });
     });
   });
-  return out;
+  return out.sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
 };
 
 const docRow = (p) => `
-  <li class="doc-row" data-policy-id="${escapeHtml(p.id)}">
+  <li class="doc-row" data-policy-id="${escapeHtml(p.id)}" data-reorder-id="${escapeHtml(p.id)}">
     <button class="doc-row__btn" type="button">
       <span class="doc-row__icon">${DOC_ICON}</span>
       <span class="doc-row__name" tabindex="-1"><span class="doc-row__name-text">${escapeHtml(p.name)}</span></span>
@@ -149,10 +149,8 @@ const formatAnswer = (text = "") => {
 
 const turnMarkup = ({ question, answer }, { pending = false } = {}) => `
   <article class="turn${pending ? " is-pending" : ""}">
-    <p class="turn__role">You</p>
-    <p class="turn__q">${escapeHtml(question)}</p>
-    <p class="turn__role turn__role--genie">${GENIE_MARK}Genie</p>
-    <div class="turn__a" data-genie-body>${formatAnswer(answer)}</div>
+    <div class="turn__bubble turn__bubble--user">${escapeHtml(question)}</div>
+    <div class="turn__bubble turn__bubble--genie" data-genie-body>${formatAnswer(answer)}</div>
   </article>`;
 
 const toExchanges = (history = []) => {

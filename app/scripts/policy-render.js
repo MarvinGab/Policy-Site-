@@ -79,32 +79,18 @@ const errorState = (message) => {
 
 export const initPolicyRender = () => {
   if (document.body?.dataset.page !== "policies") return;
+  document.body.dataset.displayMode = "loading";
 
   const container = document.querySelector("[data-policy-grid]");
   if (!container) return;
 
-  // Stale-while-revalidate: paint from cache instantly on revisit so admin
-  // round-trips (dashboard → admin → back) don't show a "Loading…" flash.
-  // Background fetch then refreshes if data changed.
-  let renderedFromCache = false;
-  try {
-    const cached = sessionStorage.getItem(RAIL_CACHE_KEY);
-    if (cached) {
-      const data = JSON.parse(cached);
-      renderRail(container, data);
-      renderedFromCache = true;
-    }
-  } catch (error) {
-    // Corrupt cache — ignore and fall through to the fresh fetch.
-    sessionStorage.removeItem(RAIL_CACHE_KEY);
-  }
-
-  if (!renderedFromCache) {
-    container.innerHTML = railState({
-      tone: "loading",
-      title: "Loading policies",
-    });
-  }
+  // Do not pre-paint cached policy data. The org can switch between module
+  // and direct display modes, and painting stale cache is exactly how the old
+  // floating Genie flashes before the fresh config arrives.
+  container.innerHTML = railState({
+    tone: "loading",
+    title: "Loading policies",
+  });
 
   // The org context comes from the subdomain — the server resolves it from
   // the Host header and scopes /api/org/policies accordingly.
@@ -131,22 +117,16 @@ export const initPolicyRender = () => {
       // when the cached state already matches the server.
       const serialized = JSON.stringify(data);
       const previous = sessionStorage.getItem(RAIL_CACHE_KEY);
-      if (serialized !== previous) {
-        sessionStorage.setItem(RAIL_CACHE_KEY, serialized);
-        renderRail(container, data);
-      } else if (!renderedFromCache) {
-        renderRail(container, data);
-      }
+      if (serialized !== previous) sessionStorage.setItem(RAIL_CACHE_KEY, serialized);
+      renderRail(container, data);
     })
     .catch((error) => {
       console.error("Policy fetch failed:", error);
-      if (!renderedFromCache) {
-        container.innerHTML = errorState(error.message || "");
-        // The floating admin shortcuts all need an org context too, so on a
-        // no-org error they would every one of them fail the same way. Hide
-        // them and let the state block carry the single next step.
-        document.body.dataset.railState = "error";
-      }
+      container.innerHTML = errorState(error.message || "");
+      // The floating admin shortcuts all need an org context too, so on a
+      // no-org error they would every one of them fail the same way. Hide
+      // them and let the state block carry the single next step.
+      document.body.dataset.railState = "error";
     });
 };
 
@@ -193,7 +173,7 @@ const buildPolicyRail = (modules) => {
         module.name
       )}" data-module-description="${escapeHtml(module.description || "")}"`;
       return `
-        <li class="policy-module-card reveal" ${moduleAttrs} data-link="#">
+        <li class="policy-module-card reveal" ${moduleAttrs} data-reorder-id="${escapeHtml(module.id)}" data-link="#">
           <button class="rail-item" type="button">
             <span class="rail-title">
               ${escapeHtml(module.name)}
@@ -232,9 +212,10 @@ const updatePolicyTotal = (modules, org, stats = {}) => {
   const label = document.querySelector("[data-policy-total]");
   if (label) {
     const moduleCount = modules.length;
-    label.textContent = `${moduleCount} ${moduleCount === 1 ? "module" : "modules"} | ${uploaded} ${
-      uploaded === 1 ? "policy" : "policies"
-    }`;
+    const policyText = `${uploaded} ${uploaded === 1 ? "policy" : "policies"}`;
+    label.textContent = org?.policy_display_mode === "direct"
+      ? policyText
+      : `${moduleCount} ${moduleCount === 1 ? "module" : "modules"} | ${policyText}`;
   }
   const kicker = document.querySelector(".policy-kicker");
   if (kicker && org?.name) {

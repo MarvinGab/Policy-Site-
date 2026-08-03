@@ -788,7 +788,8 @@ const chatWithGemini = async (prompt) => {
     generationConfig: {
       temperature: 0.25,
       topP: 0.9,
-      maxOutputTokens: 300,
+      // Room for a short list (e.g. all holidays) without truncating mid-item.
+      maxOutputTokens: 600,
     },
   });
   return result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -807,15 +808,19 @@ const withRagDebug = (req, body, debug) => {
   return wantsRagDebug(req) ? { ...body, debug } : body;
 };
 
+// Only flags genuinely broken model output (empty, a bare "source N", or a
+// sentence cut off mid-clause). It must NOT reject short-but-complete answers
+// like "18 working days per year." or a bulleted holiday list — doing so was
+// forcing valid replies down to the canned "Not in the uploaded policies."
 const isIncompleteAiAnswer = (answer = "") => {
   const text = String(answer || "").trim();
   if (!text) return true;
   if (/^source\s+\d+\b/i.test(text)) return true;
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length < 5) return true;
-  if (/[,:;]$/.test(text)) return true;
-  if (/\b(is|are|to|for|with|and|or|of|in|the|a|an)$/i.test(text)) return true;
-  if (/\b(entitled to|equal to|up to|at least|maximum of|minimum of)\s+\d+$/i.test(text)) return true;
+  // Trailing dangling connector/punctuation = truncated mid-sentence. A list
+  // that ends on a bullet line is fine, so only judge the last non-empty line.
+  const lastLine = text.split("\n").map((l) => l.trim()).filter(Boolean).pop() || "";
+  if (/[,:;]$/.test(lastLine)) return true;
+  if (/\b(is|are|to|for|with|and|or|of|in|the|a|an)$/i.test(lastLine)) return true;
   return false;
 };
 
@@ -1359,8 +1364,32 @@ const indexPolicyDocument = async ({ policyId, companyId, documentId, file }) =>
   const extracted = sanitizeText(await extractTextFromFile(file));
   if (!extracted) return { chunks: 0, reason: "No readable text found." };
 
-  const chunks = chunkText(extracted);
-  if (!chunks.length) return { chunks: 0, reason: "No chunks created." };
+  const rawChunks = chunkText(extracted);
+  if (!rawChunks.length) return { chunks: 0, reason: "No chunks created." };
+
+  // Contextual retrieval: prefix every chunk with the policy (and module) it
+  // belongs to, so both the embedding and the full-text search carry the
+  // document's identity. Without this, a terse doc (e.g. a Holiday List table)
+  // gets out-ranked by a wordier policy that merely mentions the same topic.
+  let contextLabel = "";
+  try {
+    const { data: pol } = await supabase
+      .from("org_policies")
+      .select("name, module_id")
+      .eq("id", policyId)
+      .maybeSingle();
+    let moduleName = "";
+    if (pol?.module_id) {
+      const { data: mod } = await supabase.from("org_modules").select("name").eq("id", pol.module_id).maybeSingle();
+      moduleName = mod?.name || "";
+    }
+    contextLabel = [pol?.name, moduleName].filter(Boolean).join(" — ");
+  } catch (error) {
+    console.warn("Chunk context label lookup failed:", error?.message || error);
+  }
+  const chunks = contextLabel
+    ? rawChunks.map((chunk) => `[${contextLabel}]\n${chunk}`)
+    : rawChunks;
 
   const EMBED_CONCURRENCY = 5;
   const embeddings = new Array(chunks.length);
@@ -1990,15 +2019,17 @@ const seedTemplate = async (companyId) => {
 const fetchOrgDashboard = async (companyId, { ensureTemplate = false, includeHidden = false } = {}) => {
   let moduleQuery = supabase
     .from("org_modules")
-    .select("id, name, description, image_url, is_hidden")
+    .select("id, name, description, image_url, is_hidden, position")
     .eq("company_id", companyId)
+    .order("position", { ascending: true })
     .order("name", { ascending: true });
   if (!includeHidden) moduleQuery = moduleQuery.eq("is_hidden", false);
 
   let policyQuery = supabase
     .from("org_policies")
-    .select("id, module_id, name, is_hidden")
+    .select("id, module_id, name, is_hidden, position")
     .eq("company_id", companyId)
+    .order("position", { ascending: true })
     .order("name", { ascending: true });
   if (!includeHidden) policyQuery = policyQuery.eq("is_hidden", false);
 
@@ -2011,8 +2042,9 @@ const fetchOrgDashboard = async (companyId, { ensureTemplate = false, includeHid
     // selecting without it. Treat all policies as visible.
     const fallback = await supabase
       .from("org_policies")
-      .select("id, module_id, name")
+      .select("id, module_id, name, position")
       .eq("company_id", companyId)
+      .order("position", { ascending: true })
       .order("name", { ascending: true });
     policies = (fallback.data || []).map((p) => ({ ...p, is_hidden: false }));
     policyFetchError = fallback.error;
@@ -2020,8 +2052,9 @@ const fetchOrgDashboard = async (companyId, { ensureTemplate = false, includeHid
   if (moduleFetchError && isMissingColumnError(moduleFetchError)) {
     const fallback = await supabase
       .from("org_modules")
-      .select("id, name")
+      .select("id, name, position")
       .eq("company_id", companyId)
+      .order("position", { ascending: true })
       .order("name", { ascending: true });
     modules = (fallback.data || []).map((module) => ({
       ...module,
@@ -2044,9 +2077,10 @@ const fetchOrgDashboard = async (companyId, { ensureTemplate = false, includeHid
     description: m.description || "",
     image_url: m.image_url || "",
     is_hidden: m.is_hidden === true,
+    position: Number(m.position || 0),
     policies: (policies || [])
       .filter((p) => p.module_id === m.id)
-      .map((p) => ({ id: p.id, name: p.name, is_hidden: p.is_hidden === true })),
+      .map((p) => ({ id: p.id, name: p.name, is_hidden: p.is_hidden === true, position: Number(p.position || 0) })),
   }));
 };
 
@@ -2412,14 +2446,27 @@ const filterMatchesByEvidence = ({ matches = [], question, intent = "unknown", l
 
 const POLICY_CONTEXT_CHARS_PER_EXCERPT = 900;
 
-const buildPolicyContextFromMatches = ({ matches = [], policyNameById = new Map(), limit = 6 }) =>
-  (matches || [])
-    .slice(0, limit)
+const buildPolicyContextFromMatches = ({ matches = [], policyNameById = new Map(), limit = 6, perPolicy = 4 }) => {
+  // Diversity: keep matches in relevance order but cap how many excerpts any
+  // single policy contributes, so a wordy policy can't crowd every slot and
+  // bury a short, more-relevant doc (e.g. the Holiday List behind the Leave
+  // policy). A relevant terse doc still earns its place in the context.
+  const perPolicyCount = new Map();
+  const selected = [];
+  for (const row of matches || []) {
+    const used = perPolicyCount.get(row.policy_id) || 0;
+    if (used >= perPolicy) continue;
+    perPolicyCount.set(row.policy_id, used + 1);
+    selected.push(row);
+    if (selected.length >= limit) break;
+  }
+  return selected
     .map((row, index) => {
       const policyName = policyNameById.get(row.policy_id) || "Unknown policy";
       return `Policy excerpt ${index + 1}\nPolicy: ${policyName}\nContent:\n${String(row.chunk_text || "").slice(0, POLICY_CONTEXT_CHARS_PER_EXCERPT)}`;
     })
     .join("\n\n");
+};
 
 const fetchFocusedPolicyChunks = async ({ companyId, policyAreas = [], question, limit = 4 }) => {
   const policyIds = Array.from(
@@ -3087,6 +3134,41 @@ app.delete("/api/org/policies/:id", requireOrgManager, async (req, res) => {
     return res.status(500).send(error.message || "Failed to delete policy.");
   }
   return res.json({ ok: true });
+});
+
+app.post("/api/org/reorder", requireOrgManager, async (req, res) => {
+  const type = req.body?.type === "policies" ? "policies" : req.body?.type === "modules" ? "modules" : "";
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map((id) => sanitizeText(id)).filter(Boolean) : [];
+  if (!type) return res.status(400).send("Reorder type is required.");
+  if (!ids.length) return res.status(400).send("No items to reorder.");
+  if (new Set(ids).size !== ids.length) return res.status(400).send("Duplicate reorder ids.");
+
+  const table = type === "modules" ? "org_modules" : "org_policies";
+  const { data: rows, error: lookupError } = await supabase
+    .from(table)
+    .select("id")
+    .eq("company_id", req.orgCompanyId)
+    .in("id", ids);
+  if (lookupError) {
+    console.error("Reorder lookup failed:", lookupError);
+    return res.status(500).send("Failed to save order.");
+  }
+  if ((rows || []).length !== ids.length) return res.status(400).send("Some items do not belong to this organization.");
+
+  const updates = ids.map((id, index) =>
+    supabase
+      .from(table)
+      .update({ position: index + 1 })
+      .eq("id", id)
+      .eq("company_id", req.orgCompanyId)
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((result) => result.error);
+  if (failed?.error) {
+    console.error("Reorder save failed:", failed.error);
+    return res.status(500).send(failed.error.message || "Failed to save order.");
+  }
+  return res.json({ ok: true, type, ids });
 });
 
 app.get("/api/org/people", requireOrgManager, requireStandaloneEmployeeAccess, async (req, res) => {
@@ -4993,53 +5075,14 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
         mode: "policy_no_evidence",
       }, ragDebug));
     }
-    const context = buildPolicyContextFromMatches({ matches: filtered, policyNameById, limit: 6 });
+    // LLM-primary: synthesize the answer with Gemini over the retrieved
+    // context. The old keyword-based extractive shortcuts (entitlement /
+    // sanction / committee / single-sentence) used to return here BEFORE the
+    // model ran, which surfaced tangential keyword-matched fragments
+    // ("how many sick leaves?" -> "Late Remark in the attendance system").
+    // Extraction now only survives as the Gemini-unavailable fallback below.
+    const context = buildPolicyContextFromMatches({ matches: filtered, policyNameById, limit: 10 });
     ragDebug.final_context = context;
-    const directEntitlementAnswer = answerSimpleEntitlementFromMatches({ question, matches: filtered });
-    if (directEntitlementAnswer) {
-      ragDebug.mode = "policy_entitlement_extract";
-      ragDebug.final_answer = directEntitlementAnswer;
-      return res.json(withRagDebug(req, {
-        answer: directEntitlementAnswer,
-        sources: filtered,
-        mode: "policy_entitlement_extract",
-      }, ragDebug));
-    }
-    const directSanctionAnswer = answerSimpleSanctionFromMatches({ question, matches: filtered });
-    if (directSanctionAnswer) {
-      ragDebug.mode = "policy_sanction_extract";
-      ragDebug.final_answer = directSanctionAnswer;
-      return res.json(withRagDebug(req, {
-        answer: directSanctionAnswer,
-        sources: filtered,
-        mode: "policy_sanction_extract",
-      }, ragDebug));
-    }
-    const directCommitteeMembersAnswer = answerCommitteeMembersFromMatches({ question, matches: filtered });
-    if (directCommitteeMembersAnswer) {
-      ragDebug.mode = "policy_committee_members_extract";
-      ragDebug.final_answer = directCommitteeMembersAnswer;
-      return res.json(withRagDebug(req, {
-        answer: directCommitteeMembersAnswer,
-        sources: filtered,
-        mode: "policy_committee_members_extract",
-      }, ragDebug));
-    }
-    const directPolicySentenceAnswer = answerFromPolicySentences({
-      question,
-      matches: filtered,
-      minScore: ["procedure", "definition"].includes(questionIntent) ? 12 : 16,
-      intent: questionIntent,
-    });
-    if (directPolicySentenceAnswer) {
-      ragDebug.mode = "policy_sentence_extract";
-      ragDebug.final_answer = directPolicySentenceAnswer;
-      return res.json(withRagDebug(req, {
-        answer: directPolicySentenceAnswer,
-        sources: filtered,
-        mode: "policy_sentence_extract",
-      }, ragDebug));
-    }
     const matchedPolicyAreas = summarizeMatchedPolicyAreas(filtered, modules);
 
     if (!context) {
@@ -5058,19 +5101,16 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
 
     const systemPrompt =
       "You are Ask Genie, an HR policy assistant for employees.\n\n" +
-      "STYLE — STRICT:\n" +
-      "- Maximum 2 short sentences. Bullets only if the user asks for a list.\n" +
-      "- Answer the question directly. No preamble.\n" +
-      "- Never mention policy excerpt numbers or source numbers.\n" +
-      "- Never reveal the retrieval mechanism. Forbidden phrases (do not use any of these): \"the provided\", \"the excerpts\", \"the text\", \"the document\", \"the policy text\", \"based on\", \"I checked\", \"focuses on\", \"does not describe\", \"does not contain\", \"does not mention\", \"the information provided\".\n" +
-      "- If the answer isn't in the uploaded policies, reply exactly: \"Not in the uploaded policies. Check with HR.\"\n\n" +
-      "GROUNDING:\n" +
-      "- Use only the provided policy content.\n" +
-      "- Use recent conversation only to resolve what the user is referring to; do not use it as policy evidence.\n" +
-      "- Do not invent limits, dates, amounts, approvals.\n" +
-      "- For count, entitlement, eligibility, deadline, and amount questions, answer only when the exact rule is explicitly present in the policy content; otherwise use the exact not-in-policy reply.\n" +
-      "- Do not infer one leave type or benefit from another leave type or benefit.\n" +
-      "- If a rule depends on role/location/tenure that the user didn't give, state the rule and the condition in one sentence.";
+      "STYLE:\n" +
+      "- Answer the question directly and completely, then stop. No preamble.\n" +
+      "- Be concise — usually 1-3 sentences. For questions that call for a list (e.g. holidays, leave types, steps), give a short bulleted or numbered list.\n" +
+      "- Write plainly, as if talking to the employee. Don't mention excerpts, sources, retrieval, or that you were 'provided' anything.\n\n" +
+      "GROUNDING (important):\n" +
+      "- Answer ONLY from the policy content provided below. Do not invent limits, dates, amounts, or approvals.\n" +
+      "- Each excerpt is labeled with the policy it came from. When multiple policies appear, use the one that actually matches the question — do not answer a question about one leave/benefit type using text about a different one.\n" +
+      "- If the policy content genuinely does not contain the answer, reply exactly: \"Not in the uploaded policies. Check with HR.\" Do NOT force an answer out of loosely-related text.\n" +
+      "- Use the recent conversation only to understand what the user is referring to (e.g. resolving 'those' or a follow-up), not as policy evidence.\n" +
+      "- If a rule depends on role/location/tenure the user didn't specify, state the rule and its condition in one sentence.";
     const closestPolicyPath = closestPolicyArea?.score > 0
       ? `${closestPolicyArea.module.name} > ${closestPolicyArea.policy.name}`
       : "No close policy area detected.";

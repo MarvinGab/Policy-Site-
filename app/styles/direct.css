@@ -16,13 +16,17 @@ body[data-display-mode="direct"] .chatbot {
   display: none;
 }
 
+body[data-page="policies"][data-display-mode="loading"] .chatbot {
+  display: none;
+}
+
 .direct-view {
   /* Shelf and library share this: collapsing must not change the width. */
-  --w-shelf: min(100%, clamp(680px, 92vw, 2280px));
+  --w-shelf: var(--policy-page-width, min(100%, clamp(680px, 92vw, 2280px)));
   /* Large screens should not leave dead gutters beside the active chat. */
   --w-convo: min(100%, clamp(720px, 68vw, 1500px));
-  /* The anchor tracks the conversation instead of sitting as a narrow dock. */
-  --w-composer: min(100%, clamp(720px, 76vw, 1700px));
+  /* Shorter than the policy shelf so it reads as an intentional chat bar. */
+  --w-composer: min(100%, clamp(640px, 62vw, 1360px));
 
   --glass: color-mix(in srgb, var(--surface-solid, #f8f9fd) 66%, transparent);
   --hairline: color-mix(in srgb, var(--ink) 10%, transparent);
@@ -45,7 +49,7 @@ body[data-display-mode="direct"] .chatbot {
   flex-direction: column;
   gap: 18px;
   min-width: 0;
-  padding-bottom: 0;
+  padding-bottom: clamp(48px, 6.5vh, 104px);
 }
 
 /* The dashboard's own generous bottom padding would be added below a
@@ -198,9 +202,14 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
    the row scrolls rather than wrapping to a second. */
 .direct-view[data-state="genie"] .shelf,
 .direct-view[data-state="history"] .shelf {
-  padding: 9px 14px;
+  flex: 0 0 68px;
+  height: 68px;
+  min-height: 68px;
+  max-height: 68px;
+  overflow: hidden;
+  padding: 0 14px;
   border: 1px solid var(--hairline);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--glass);
   -webkit-backdrop-filter: saturate(140%) blur(16px);
   backdrop-filter: saturate(140%) blur(16px);
@@ -208,6 +217,8 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 
 .direct-view[data-state="genie"] .shelf__bar,
 .direct-view[data-state="history"] .shelf__bar {
+  height: 66px;
+  min-height: 66px;
   padding-bottom: 0;
 }
 
@@ -220,6 +231,7 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 .direct-view[data-state="genie"] .shelf__chips,
 .direct-view[data-state="history"] .shelf__chips {
   display: flex;
+  align-items: center;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -273,6 +285,14 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(clamp(320px, 24vw, 400px), 100%), 1fr));
   gap: clamp(6px, 0.5vw, 10px);
+}
+
+.is-reordering .shelf__list {
+  overflow: clip;
+}
+
+.is-reordering .shelf__list:has(.is-dragging) {
+  overflow: visible;
 }
 
 .shelf__empty {
@@ -339,6 +359,94 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 
 .doc-row__btn:hover::before {
   opacity: 1;
+}
+
+.is-reordering .doc-row {
+  cursor: grab;
+  touch-action: none;
+  contain: paint;
+}
+
+.is-reordering .doc-row .doc-row__btn {
+  cursor: grab;
+  animation: reorder-wiggle 340ms ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.is-reordering .doc-row:nth-child(even) .doc-row__btn {
+  animation-delay: -140ms;
+  animation-duration: 380ms;
+}
+
+.is-reordering .doc-row:nth-child(3n) .doc-row__btn {
+  animation-delay: -210ms;
+  animation-duration: 310ms;
+}
+
+.is-reordering .doc-row .doc-row__go {
+  display: none;
+}
+
+.is-reordering .doc-row__btn:hover {
+  transform: none;
+}
+
+.is-reordering .doc-row.is-dragging {
+  z-index: 20;
+  animation: none;
+  contain: none;
+}
+
+.is-reordering .doc-row.is-selected {
+  z-index: 5;
+}
+
+.is-reordering .doc-row.is-selected .doc-row__btn {
+  animation: none;
+  transform: scale(1.035) translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--policy-tile-border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--policy-tile-bg-hover) 86%);
+  box-shadow:
+    inset 0 1px 0 var(--policy-tile-highlight),
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 22px 44px rgba(18, 22, 36, 0.2);
+}
+
+.is-reordering .doc-row.is-selected .doc-row__btn::after {
+  content: "✓";
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  opacity: 1;
+}
+
+.is-reordering .doc-row.is-dragging .doc-row__btn {
+  cursor: grabbing;
+  transform: scale(1.028);
+  box-shadow: 0 22px 44px rgba(18, 22, 36, 0.2);
+  animation: none;
+}
+
+.is-reordering .doc-row.is-drop-target .doc-row__btn {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent), var(--policy-tile-shadow-hover);
+}
+
+.is-reordering .doc-row:not(.is-selected) .doc-row__btn::after {
+  content: "⋮⋮";
+  margin-left: auto;
+  font-size: 0.82rem;
+  letter-spacing: -0.18em;
+  color: var(--ink-muted);
+  opacity: 0.55;
 }
 
 .doc-row__go {
@@ -503,34 +611,6 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
   animation: genie-float 4.5s ease-in-out infinite;
 }
 
-.turn__role--genie .genie-mark {
-  width: 17px;
-  height: 16px;
-}
-
-.turn__role--genie .bot-face {
-  width: 14px;
-  height: 14px;
-  border-radius: 5px;
-}
-
-.turn__role--genie .bot-face::before,
-.turn__role--genie .bot-face::after {
-  top: 4.5px;
-  width: 3px;
-  height: 3px;
-}
-
-.turn__role--genie .bot-face::before { left: 3px; }
-.turn__role--genie .bot-face::after { right: 3px; }
-
-.turn__role--genie .bot-hand {
-  right: -2px;
-  top: 8px;
-  width: 7px;
-  height: 3px;
-}
-
 /* ══ Workspace ════════════════════════════════════════════════════════════ */
 
 .genie {
@@ -544,7 +624,7 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 /* Breathing room so the anchored composer clears the viewport floor without
    a margin hack on the composer itself. */
 .composer {
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
 /* Present in every state. While browsing it renders nothing and simply
@@ -554,7 +634,7 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 .genie__scroll {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 24px;
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
@@ -562,7 +642,7 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
   scrollbar-width: thin;
   width: var(--w-convo);
   margin: 0 auto;
-  padding: 2px 0;
+  padding: 8px 0 2px;
 }
 
 .direct-view[data-state="genie"] .genie__scroll,
@@ -585,6 +665,11 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
   color: var(--ink-muted);
   cursor: pointer;
   transition: color 160ms ease, border-color 160ms ease;
+}
+
+.direct-view[data-state="genie"] .genie__earlier,
+.direct-view[data-state="history"] .genie__earlier {
+  margin-top: 0;
 }
 
 .genie__earlier[hidden] {
@@ -629,70 +714,64 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 .genie__turns {
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 18px;
 }
 
-/* ── Turns: typography and whitespace, no cards or bubbles ── */
+/* ── Turns: simple left/right chat bubbles ── */
 
 .turn {
   display: grid;
-  gap: 5px;
+  gap: 10px;
   animation: fade-up 220ms var(--ease) both;
 }
 
-.turn__role {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--ink-muted) 88%, transparent);
-}
-
-.turn__role--genie {
-  margin-top: 16px;
-}
-
-.turn__q {
-  margin: 0;
-  font-size: clamp(1rem, 0.3vw + 0.93rem, 1.14rem);
-  font-weight: 500;
-  line-height: 1.45;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.turn__a {
+.turn__bubble {
+  max-width: min(78%, 760px);
+  padding: 12px 15px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
   font-size: clamp(0.94rem, 0.2vw + 0.89rem, 1.02rem);
-  line-height: 1.72;
+  line-height: 1.58;
   color: var(--ink);
   overflow-wrap: anywhere;
 }
 
-.turn__a > * {
+.turn__bubble--user {
+  justify-self: end;
+  border: none;
+  border-bottom-right-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-solid, var(--panel-strong)) 78%);
+  box-shadow: 0 10px 24px rgba(18, 22, 36, 0.08);
+}
+
+.turn__bubble--genie {
+  justify-self: start;
+  border-bottom-left-radius: 6px;
+  background: color-mix(in srgb, var(--surface-solid, var(--panel-strong)) 78%, var(--panel-strong) 22%);
+  box-shadow: 0 6px 18px rgba(18, 22, 36, 0.05);
+}
+
+.turn__bubble > * {
   margin: 0;
 }
 
-.turn__a > * + * {
+.turn__bubble > * + * {
   margin-top: 0.85em;
 }
 
-.turn__a ul {
+.turn__bubble ul {
   padding-left: 0;
   list-style: none;
   display: grid;
   gap: 0.4em;
 }
 
-.turn__a li {
+.turn__bubble li {
   position: relative;
   padding-left: 1.2em;
 }
 
-.turn__a li::before {
+.turn__bubble li::before {
   content: "";
   position: absolute;
   left: 0.25em;
@@ -704,32 +783,76 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
   opacity: 0.55;
 }
 
-.turn.is-pending .turn__a {
+.turn.is-pending .turn__bubble--genie {
   color: var(--ink-muted);
 }
 
 /* ══ Composer — the anchor ════════════════════════════════════════════════ */
 
 .composer {
+  position: relative;
+  isolation: isolate;
   flex: none;
   width: var(--w-composer);
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 9px 9px 14px;
-  border-radius: 14px;
+  gap: 12px;
+  min-height: 60px;
+  padding: 11px 11px 11px 18px;
+  border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--ink) 13%, transparent);
-  background: var(--glass);
+  background: transparent;
+  box-shadow: 0 1px 2px rgba(18, 22, 36, 0.04), 0 8px 24px rgba(18, 22, 36, 0.06);
+  transition: border-color 220ms ease, box-shadow 240ms ease, background 240ms ease;
+}
+
+.composer::before,
+.composer::after {
+  content: "";
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.composer::before {
+  inset: -5px;
+  z-index: -1;
+  border-radius: 20px;
+  background: linear-gradient(90deg, #ff4d6d, #ffd93d, #2ed9ff, #6bff7a, #9b6bff, #ff4d6d);
+  background-size: 300% 100%;
+  opacity: 0.38;
+  filter: blur(8px);
+  animation: composer-rim-flow 16s linear infinite;
+  transition: opacity 240ms ease, filter 240ms ease;
+}
+
+.composer::after {
+  inset: 0;
+  z-index: 0;
+  background: color-mix(in srgb, var(--surface-solid, #f8f9fd) 88%, var(--panel-strong) 12%);
+  border-radius: inherit;
   -webkit-backdrop-filter: saturate(140%) blur(16px);
   backdrop-filter: saturate(140%) blur(16px);
-  box-shadow: 0 1px 2px rgba(18, 22, 36, 0.04), 0 8px 24px rgba(18, 22, 36, 0.06);
-  transition: border-color 200ms ease, box-shadow 220ms ease;
+}
+
+.composer > * {
+  position: relative;
+  z-index: 1;
 }
 
 .composer:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  box-shadow: 0 0 0 3px var(--accent-soft), 0 10px 28px rgba(18, 22, 36, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--outline));
+  box-shadow: 0 1px 2px rgba(18, 22, 36, 0.05), 0 12px 30px rgba(18, 22, 36, 0.1);
+}
+
+.composer:focus-within::after {
+  background: color-mix(in srgb, var(--surface-solid, #f8f9fd) 86%, var(--panel-strong) 14%);
+}
+
+.composer:focus-within::before {
+  opacity: 0.46;
+  filter: blur(10px);
 }
 
 .composer .genie-mark {
@@ -743,10 +866,10 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
   background: none;
   resize: none;
   font: inherit;
-  font-size: 0.98rem;
+  font-size: 1rem;
   line-height: 1.5;
   color: var(--ink);
-  padding: 6px 0;
+  padding: 7px 0;
   max-height: 160px;
 }
 
@@ -760,10 +883,10 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 
 .composer__send {
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border: none;
-  border-radius: 9px;
+  border-radius: 11px;
   background: var(--accent);
   color: #fff;
   cursor: pointer;
@@ -798,6 +921,12 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes composer-rim-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .direct-view *,
   .direct-view *::before {
@@ -807,9 +936,8 @@ html[data-theme="carbon"] body[data-display-mode="direct"] .direct-view {
 }
 
 @media (min-width: 1440px) and (min-height: 860px) {
-  .direct-view[data-state="genie"],
-  .direct-view[data-state="history"] {
-    padding-bottom: clamp(28px, 4vh, 64px);
+  .direct-view {
+    padding-bottom: clamp(76px, 9vh, 148px);
   }
 }
 
