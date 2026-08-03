@@ -1,12 +1,12 @@
-import "./security.js?v=reorder-20260803-5";
-import { initAuth } from "./auth.js?v=reorder-20260803-5";
-import { initHeader } from "./header.js?v=reorder-20260803-5";
-import { initModules } from "./modules.js?v=reorder-20260803-5";
-import { initPolicyRender } from "./policy-render.js?v=reorder-20260803-5";
-import { initReveal } from "./reveal.js?v=reorder-20260803-5";
-import { initState } from "./state.js?v=reorder-20260803-5";
-import { initAdmin } from "./admin.js?v=reorder-20260803-5";
-import { initChatbot } from "./chatbot.js?v=reorder-20260803-5";
+import "./security.js?v=header-slim-20260803-1";
+import { initAuth } from "./auth.js?v=header-slim-20260803-1";
+import { initHeader } from "./header.js?v=header-slim-20260803-1";
+import { initModules } from "./modules.js?v=header-slim-20260803-1";
+import { initPolicyRender } from "./policy-render.js?v=header-slim-20260803-1";
+import { initReveal } from "./reveal.js?v=header-slim-20260803-1";
+import { initState } from "./state.js?v=header-slim-20260803-1";
+import { initAdmin } from "./admin.js?v=header-slim-20260803-1";
+import { initChatbot } from "./chatbot.js?v=header-slim-20260803-1";
 
 const loadComponents = async () => {
   const includes = Array.from(document.querySelectorAll("[data-include]"));
