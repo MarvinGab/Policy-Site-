@@ -118,6 +118,21 @@ export const buildDirectView = (data = {}) => {
         <form class="composer" data-genie-form>
           <label class="sr-only" for="genie-input">Ask about your company policies</label>
           ${GENIE_MARK}
+          <span class="chatbot-info chatbot-info--up" data-chatbot-info>
+            <button class="chatbot-info-btn" type="button" aria-label="About Ask Genie" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><line x1="12" y1="7.6" x2="12" y2="7.6"/>
+              </svg>
+            </button>
+            <span class="chatbot-info-pop" role="tooltip">
+              <span class="chatbot-info-langs" role="group" aria-label="Language">
+                <button type="button" class="chatbot-info-lang is-active" data-lang="en">EN</button>
+                <button type="button" class="chatbot-info-lang" data-lang="hi">हिं</button>
+              </span>
+              <span class="chatbot-info-text" data-info-lang="en">Ask Genie answers only from your organization's uploaded policy documents — those documents are the official source of truth. It can misread or miss details, so always confirm anything important against the actual policy or with HR before acting on it. Its answers are for guidance only and are not binding.</span>
+              <span class="chatbot-info-text" data-info-lang="hi" lang="hi" hidden>Ask Genie केवल आपकी कंपनी के अपलोड किए गए पॉलिसी दस्तावेज़ों से ही उत्तर देता है — वही दस्तावेज़ आधिकारिक और सही स्रोत हैं। यह कभी-कभी गलत समझ सकता है या कोई जानकारी छूट सकती है, इसलिए किसी भी ज़रूरी बात पर अमल करने से पहले उसे असली पॉलिसी में या HR से अवश्य जाँच लें। इसके उत्तर केवल मार्गदर्शन के लिए हैं, बाध्यकारी नहीं।</span>
+            </span>
+          </span>
           <textarea class="composer__input" id="genie-input" data-genie-input rows="1"
             placeholder="Ask about leave, holidays, POSH..." required></textarea>
           <button class="composer__send" type="submit" aria-label="Send">

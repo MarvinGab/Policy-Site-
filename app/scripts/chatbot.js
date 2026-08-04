@@ -38,6 +38,42 @@ export const initChatbot = () => {
 
   close?.addEventListener("click", () => setOpen(false));
 
+  // Disclaimer popover wiring — DELEGATED at document level so it works for
+  // both the floating panel and the inline direct-view composer (which is
+  // rendered dynamically). CSS handles hover; this adds tap-to-toggle,
+  // click-away / Escape close, and the EN/हिं language switch.
+  const closeAllInfo = () => {
+    document.querySelectorAll("[data-chatbot-info].is-open").forEach((el) => {
+      el.classList.remove("is-open");
+      el.querySelector(".chatbot-info-btn")?.setAttribute("aria-expanded", "false");
+    });
+  };
+  document.addEventListener("click", (event) => {
+    const langBtn = event.target.closest(".chatbot-info-lang");
+    if (langBtn) {
+      event.stopPropagation();
+      const box = langBtn.closest("[data-chatbot-info]");
+      const lang = langBtn.dataset.lang;
+      box?.querySelectorAll(".chatbot-info-lang").forEach((b) => b.classList.toggle("is-active", b === langBtn));
+      box?.querySelectorAll(".chatbot-info-text").forEach((t) => { t.hidden = t.dataset.infoLang !== lang; });
+      return;
+    }
+    const btn = event.target.closest(".chatbot-info-btn");
+    if (btn) {
+      event.stopPropagation();
+      const box = btn.closest("[data-chatbot-info]");
+      const open = !box.classList.contains("is-open");
+      closeAllInfo();
+      box.classList.toggle("is-open", open);
+      btn.setAttribute("aria-expanded", String(open));
+      return;
+    }
+    if (!event.target.closest("[data-chatbot-info]")) closeAllInfo();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAllInfo();
+  });
+
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-chatbot]")) return;
     setOpen(false);

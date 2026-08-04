@@ -165,6 +165,97 @@
 .chatbot-title {
   font-weight: 700;
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- Disclaimer info button + popover --- */
+.chatbot-info { position: relative; display: inline-flex; }
+
+.chatbot-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  border-radius: 999px;
+  opacity: 0.6;
+  transition: opacity 140ms ease, color 140ms ease;
+}
+.chatbot-info-btn svg { width: 15px; height: 15px; }
+.chatbot-info-btn:hover,
+.chatbot-info-btn:focus-visible,
+.chatbot-info-btn[aria-expanded="true"] { opacity: 1; color: var(--accent); }
+
+.chatbot-info-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -6px;
+  width: min(288px, 76vw);
+  background: var(--panel-strong);
+  color: var(--ink);
+  border: 1px solid var(--outline);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.5;
+  z-index: 60;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 150ms ease, transform 150ms ease, visibility 150ms;
+}
+.chatbot-info:hover .chatbot-info-pop,
+.chatbot-info:focus-within .chatbot-info-pop,
+.chatbot-info.is-open .chatbot-info-pop {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.chatbot-info-langs { display: inline-flex; gap: 4px; margin-bottom: 7px; }
+.chatbot-info-lang {
+  border: 1px solid var(--outline);
+  background: transparent;
+  color: var(--ink-muted);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.chatbot-info-lang.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.chatbot-info-text { display: block; }
+.chatbot-info-text[hidden] { display: none; }
+
+/* Upward variant — used in the inline direct-view composer, which sits at the
+   bottom of the page, so the popover must open above the button. */
+.chatbot-info--up { align-self: center; }
+.chatbot-info--up .chatbot-info-pop {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform: translateY(4px);
+}
+.chatbot-info--up:hover .chatbot-info-pop,
+.chatbot-info--up:focus-within .chatbot-info-pop,
+.chatbot-info--up.is-open .chatbot-info-pop {
+  transform: translateY(0);
 }
 
 .chatbot-subtitle {
