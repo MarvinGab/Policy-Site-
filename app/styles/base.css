@@ -44,6 +44,11 @@
   --outline: rgba(28, 36, 56, 0.12);
   --panel: rgba(255, 255, 255, 0.9);
   --panel-strong: rgba(248, 249, 253, 0.98);
+  /* Every theme in themes.css defines this, but the untheméd base did not —
+     so overlay surfaces (the flyout, the search dropdown) fell back to
+     --panel-strong and its 0.98 alpha let the content underneath ghost
+     through until a theme attribute landed on <html>. */
+  --surface-solid: #f8f9fd;
   --shadow: 0 24px 48px rgba(18, 22, 36, 0.12);
   --page-bg: radial-gradient(900px 520px at 15% 0%, rgba(63, 104, 255, 0.12), transparent 65%),
     radial-gradient(800px 420px at 85% 10%, rgba(54, 162, 190, 0.12), transparent 70%),

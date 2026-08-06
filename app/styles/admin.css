@@ -767,23 +767,37 @@ body.admin-branding .admin-head { display: none; }
   color: var(--ink);
 }
 
+/* Policies flow into as many columns as the canvas genuinely supports
+   rather than one full-width row each. auto-fit + minmax does the work, so
+   there is no breakpoint list to keep in sync with any particular display:
+   the track floor scales with the viewport and is capped so cards stay a
+   sane management size on very large monitors.
+
+   `min(..., 100%)` is load-bearing — without it the 380px floor exceeds a
+   phone's available width and the grid overflows horizontally. */
 .admin-policy-list {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(clamp(380px, 28vw, 460px), 100%), 1fr));
+  gap: clamp(10px, 0.9vw, 16px);
+  align-items: start;
 }
 
+/* A compact management card: name and status on top, controls beneath.
+   Stacking rather than a two-column row is what lets several fit per row —
+   the old `minmax(200px, 1fr) 170px` needed ~370px of width before the
+   controls even started. */
 .admin-policy {
-  display: grid;
-  grid-template-columns: minmax(200px, 1fr) 170px;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px 15px;
   border-radius: 16px;
   background: var(--panel-strong);
   border: 1px solid transparent;
+  min-width: 0;
 }
 
 .admin-policy:hover {
@@ -812,9 +826,33 @@ body.admin-branding .admin-head { display: none; }
 }
 
 .admin-actions {
-  display: inline-flex;
-  justify-content: center;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Inside a policy card the controls sit on their own row and wrap, so a
+   narrow column degrades to two rows of buttons instead of overflowing. */
+.admin-policy .admin-actions {
+  margin-top: auto;
+}
+
+.admin-policy .icon-btn {
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 6px 10px;
+}
+
+.admin-policy .policy-main {
+  min-width: 0;
+}
+
+.admin-policy .policy-name {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .icon-btn {
@@ -1264,6 +1302,56 @@ body.admin-branding .admin-head { display: none; }
 }
 
 .branding-save { justify-self: start; margin-top: 4px; }
+.branding-actions .btn[hidden] { display: none; }
+
+/* Keeps the row from collapsing the section's spacing when everything inside
+   is hidden at rest. */
+.branding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Short-lived post-save confirmation. Deliberately not a button — there is
+   nothing to click, so it must not look actionable. */
+.branding-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--success, #1e6e44);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: branding-saved-in 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.branding-saved[hidden] {
+  display: none;
+}
+
+.branding-saved svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes branding-saved-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branding-saved { animation: none; }
+}
 
 .hrms-access-panel {
   display: grid;

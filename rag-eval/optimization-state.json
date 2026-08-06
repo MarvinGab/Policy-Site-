@@ -1,0 +1,146 @@
+{
+  "baseline": {
+    "source_baseline_file": "rag-eval/results/baseline-2026-08-01T11-57-58-974Z.json",
+    "corrected_metrics_file": "rag-eval/results/baseline-corrected-metrics-2026-08-01T11-57-58-974Z.json",
+    "answerable_raw_retrieval_accuracy": 0.4939759036144578,
+    "answerable_final_context_retrieval_accuracy": 0.060240963855421686,
+    "final_answer_accuracy_excluding_quota_failures": 0.4,
+    "lazy_employee_answer_accuracy": 0.45161290322580644,
+    "unanswerable_accuracy": 0.4166666666666667,
+    "hallucination_on_unanswerable_count": 7,
+    "metadata_org_isolation_failures": 0,
+    "quota_failed_cases": 5
+  },
+  "best_score": {
+    "answerable_raw_retrieval_accuracy": 0.4939759036144578,
+    "answerable_final_context_retrieval_accuracy": 0.9036144578313253,
+    "policy_language_final_context_accuracy": 0.9230769230769231,
+    "lazy_employee_final_context_accuracy": 0.8888888888888888,
+    "follow_up_final_context_accuracy": 1,
+    "organization_isolation_failures": 0,
+    "phase": "retrieval-selection-best-frozen"
+  },
+  "best_commit_or_snapshot": "best-known retrieval-selection working tree: selected evidence context before direct extraction plus 900-character excerpts",
+  "iterations": [
+    {
+      "id": 1,
+      "status": "accepted",
+      "mode": "retrieval-only/no-llm",
+      "diagnosis": {
+        "chosen_bottleneck": "direct-extraction bypass / selected evidence preservation",
+        "evidence": "Most raw-not-final failures were direct extraction modes. Correct evidence appeared in retrieved candidates but final_context was empty because direct extraction returned before context construction."
+      },
+      "hypothesis": "Constructing selected evidence context immediately after evidence filtering, before direct-extraction exits, will preserve strong retrieved evidence generically without changing raw retrieval.",
+      "change": "Added buildPolicyContextFromMatches and set ragDebug.final_context before direct extraction returns.",
+      "validation": [
+        "node --check server/index.js",
+        "node --check scripts/rag-eval-no-llm.mjs"
+      ],
+      "metrics": {
+        "answerable_raw_retrieval_accuracy": 0.4939759036144578,
+        "answerable_final_context_retrieval_accuracy": 0.7349397590361446,
+        "policy_language_final_context_accuracy": 0.7692307692307693,
+        "lazy_employee_final_context_accuracy": 0.7222222222222222,
+        "follow_up_final_context_accuracy": 0.6666666666666666,
+        "organization_isolation_failures": 0
+      },
+      "decision": "accepted",
+      "anti_overfit": "Generic selected-evidence preservation makes sense for any org and document set; no Trio/question-specific logic."
+    },
+    {
+      "id": 2,
+      "status": "accepted",
+      "mode": "retrieval-only/no-llm",
+      "diagnosis": {
+        "chosen_bottleneck": "final-context truncation",
+        "evidence": "After iteration 1, correct selected chunks often contained the answer but 650-character excerpt truncation removed required facts inside long chunks."
+      },
+      "hypothesis": "Increasing generic per-excerpt preservation from 650 to 900 characters will keep more of the already-selected chunk evidence in final context without changing retrieval, embeddings, chunking, prompts, or model.",
+      "change": "Introduced POLICY_CONTEXT_CHARS_PER_EXCERPT = 900 and used it in buildPolicyContextFromMatches.",
+      "validation": [
+        "node --check server/index.js",
+        "node --check scripts/rag-eval-no-llm.mjs"
+      ],
+      "metrics": {
+        "answerable_raw_retrieval_accuracy": 0.4939759036144578,
+        "answerable_final_context_retrieval_accuracy": 0.9036144578313253,
+        "policy_language_final_context_accuracy": 0.9230769230769231,
+        "lazy_employee_final_context_accuracy": 0.8888888888888888,
+        "follow_up_final_context_accuracy": 1,
+        "organization_isolation_failures": 0
+      },
+      "decision": "accepted",
+      "anti_overfit": "Preserving 900 characters from selected evidence chunks is generic and not tied to Trio, document names, or expected answers."
+    }
+  ],
+  "regressions": [],
+  "stop_reason": "Target reached for retrieval-only phase: answerable final-context retrieval >= 75% (actual 90.4%) while preserving raw retrieval and org isolation.",
+  "raw_retrieval_phase": {
+    "status": "blocked_before_production_change",
+    "baseline_best": {
+      "answerable_raw_retrieval_accuracy": 0.4939759036144578,
+      "answerable_final_context_retrieval_accuracy": 0.9036144578313253,
+      "organization_isolation_failures": 0
+    },
+    "diagnosis": {
+      "total_answerable_raw_failures": 42,
+      "ranked_causes": [
+        {
+          "cause": "abbreviation mismatch / acronym handling",
+          "count": 21,
+          "notes": "Many POSH/IC/AL-style queries retrieve policy-near chunks but miss exact source evidence; generic acronym expansion/query representation is likely high leverage."
+        },
+        {
+          "cause": "poor query representation",
+          "count": 8,
+          "notes": "Queries have the right broad policy but miss exact semantic target such as gifts, media approval, family relation disclosure, or policy applicability."
+        },
+        {
+          "cause": "lazy/typo-heavy employee language",
+          "count": 7,
+          "notes": "Indian workplace phrasing and terse employee wording weakens lexical and semantic matching. New regression “what is teh punishment for POSH” also belongs here: typo plus consequence intent can be confused with generic POSH content."
+        },
+        {
+          "cause": "heading/context loss or document metadata not participating enough",
+          "count": 4,
+          "notes": "Correct document appears but section-level facts are not recalled strongly, suggesting headings/document metadata would help recall."
+        },
+        {
+          "cause": "follow-up query resolution",
+          "count": 1,
+          "notes": "One follow-up failed raw retrieval."
+        },
+        {
+          "cause": "keyword/full-text retrieval weakness",
+          "count": 1,
+          "notes": "One numeric/semantic maternity query returned no candidates."
+        }
+      ],
+      "highest_leverage_hypothesis": "Generic query normalization and acronym/abbreviation expansion before retrieval should improve raw retrieval for unseen organizations because employee queries often use shorthand or informal wording that does not match policy text."
+    },
+    "stop_reason": "Cannot validly evaluate raw retrieval changes under current instruction because the live retrieval path generates query embeddings through Gemini, and this phase explicitly says not to call Gemini. Offline replay cannot measure changes to query representation, hybrid weighting, top-k, or metadata search because candidate sets are already fixed.",
+    "regression_cases": [
+      {
+        "id": "trio-posh-punishment-typo-regression-001",
+        "raw_query": "what is teh punishment for POSH",
+        "intent": "consequences / disciplinary action / penalties for POSH violation or established misconduct",
+        "expected_generic_behavior": "Retrieve and use consequence/disciplinary evidence if present; otherwise say not found. Do not answer with generic POSH prohibition or definitions.",
+        "likely_failure_cause": "lazy/typo-heavy employee language plus query representation: typo “teh” weakens the query, and POSH is a broad acronym that can over-attract generic POSH definition/prohibition chunks unless consequence terms like punishment/disciplinary/action are preserved strongly through retrieval and evidence selection.",
+        "anti_overfit_note": "This is an evaluation-only regression. Production must not add a POSH-punishment section mapping or hardcoded answer."
+      }
+    ],
+    "proposed_iterations": [
+      {
+        "id": "raw-retrieval-consequence-intent-001",
+        "status": "implemented_static_validated_not_full_evaluated",
+        "hypothesis": "A generic consequence/punishment intent should keep punishment, penalty, disciplinary, sanction, suspension, termination, warning, and corrective-action evidence distinct from generic definition/prohibition evidence.",
+        "change": "Added generic consequence intent classification, context hint, and consequence evidence concept scoring. No POSH-specific mapping or answer rule was added.",
+        "validation": [
+          "node --check server/index.js"
+        ],
+        "evaluation_status": "Full live raw-retrieval evaluation not run because it would require Gemini embeddings/API calls.",
+        "anti_overfit": "This applies to any policy domain with misconduct, breach, violation, or disciplinary consequences; it does not reference Trio, POSH sections, document names, or expected answers."
+      }
+    ]
+  }
+}

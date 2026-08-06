@@ -6,7 +6,9 @@
   "scripts": {
     "predev": "lsof -ti :${PORT:-5183} | xargs kill -9 2>/dev/null; exit 0",
     "dev": "nodemon server/index.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "rag:eval": "node scripts/rag-eval.mjs",
+    "rag:eval:no-llm": "node scripts/rag-eval-no-llm.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.5",

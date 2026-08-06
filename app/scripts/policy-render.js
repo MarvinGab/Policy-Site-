@@ -1,6 +1,11 @@
-// Renders the rail of module cards for an organization on /policies.html.
+// Renders the employee policy page for an organization on /policies.html.
 // Pulls the modules + policies from the API for the org specified in ?org=<id>.
 // If no org param is given (e.g. someone hits /policies.html directly), bounces to /orgs.html.
+//
+// Two presentations share this payload — module cards, or the Direct Policy +
+// Genie view — selected by the org's policy_display_mode.
+
+import { buildDirectView, initDirectView } from "./direct-view.js";
 
 const ICON_BY_SLUG = {
   "doing-the-right-thing": "/Images/ChatGPT Image Jan 13, 2026, 03_46_37 PM.png",
@@ -74,32 +79,18 @@ const errorState = (message) => {
 
 export const initPolicyRender = () => {
   if (document.body?.dataset.page !== "policies") return;
+  document.body.dataset.displayMode = "loading";
 
   const container = document.querySelector("[data-policy-grid]");
   if (!container) return;
 
-  // Stale-while-revalidate: paint from cache instantly on revisit so admin
-  // round-trips (dashboard → admin → back) don't show a "Loading…" flash.
-  // Background fetch then refreshes if data changed.
-  let renderedFromCache = false;
-  try {
-    const cached = sessionStorage.getItem(RAIL_CACHE_KEY);
-    if (cached) {
-      const data = JSON.parse(cached);
-      renderRail(container, data);
-      renderedFromCache = true;
-    }
-  } catch (error) {
-    // Corrupt cache — ignore and fall through to the fresh fetch.
-    sessionStorage.removeItem(RAIL_CACHE_KEY);
-  }
-
-  if (!renderedFromCache) {
-    container.innerHTML = railState({
-      tone: "loading",
-      title: "Loading policies",
-    });
-  }
+  // Do not pre-paint cached policy data. The org can switch between module
+  // and direct display modes, and painting stale cache is exactly how the old
+  // floating Genie flashes before the fresh config arrives.
+  container.innerHTML = railState({
+    tone: "loading",
+    title: "Loading policies",
+  });
 
   // The org context comes from the subdomain — the server resolves it from
   // the Host header and scopes /api/org/policies accordingly.
@@ -126,29 +117,38 @@ export const initPolicyRender = () => {
       // when the cached state already matches the server.
       const serialized = JSON.stringify(data);
       const previous = sessionStorage.getItem(RAIL_CACHE_KEY);
-      if (serialized !== previous) {
-        sessionStorage.setItem(RAIL_CACHE_KEY, serialized);
-        renderRail(container, data);
-      } else if (!renderedFromCache) {
-        renderRail(container, data);
-      }
+      if (serialized !== previous) sessionStorage.setItem(RAIL_CACHE_KEY, serialized);
+      renderRail(container, data);
     })
     .catch((error) => {
       console.error("Policy fetch failed:", error);
-      if (!renderedFromCache) {
-        container.innerHTML = errorState(error.message || "");
-        // The floating admin shortcuts all need an org context too, so on a
-        // no-org error they would every one of them fail the same way. Hide
-        // them and let the state block carry the single next step.
-        document.body.dataset.railState = "error";
-      }
+      container.innerHTML = errorState(error.message || "");
+      // The floating admin shortcuts all need an org context too, so on a
+      // no-org error they would every one of them fail the same way. Hide
+      // them and let the state block carry the single next step.
+      document.body.dataset.railState = "error";
     });
 };
 
 // Centralized render so cache-paint and fresh-paint stay in sync.
+//
+// One of two presentations, chosen by the organization's policy_display_mode
+// (carried on data.org, since /api/org/settings is manager-only). Both are
+// fed the same payload — direct view flattens the modules it is given rather
+// than loading policies of its own.
 const renderRail = (container, data) => {
   const modules = data.modules || [];
-  container.innerHTML = buildPolicyRail(modules);
+  const displayMode = data.org?.policy_display_mode === "direct" ? "direct" : "module";
+  // Drives the CSS that hides the floating assistant in direct mode and
+  // relaxes the dashboard's own width constraints.
+  document.body.dataset.displayMode = displayMode;
+
+  if (displayMode === "direct") {
+    container.innerHTML = buildDirectView(data);
+    initDirectView(container);
+  } else {
+    container.innerHTML = buildPolicyRail(modules);
+  }
   container.querySelectorAll(".reveal").forEach((element) => element.classList.add("is-visible"));
   updatePolicyTotal(modules, data.org, data.stats);
 };
@@ -173,7 +173,7 @@ const buildPolicyRail = (modules) => {
         module.name
       )}" data-module-description="${escapeHtml(module.description || "")}"`;
       return `
-        <li class="policy-module-card reveal" ${moduleAttrs} data-link="#">
+        <li class="policy-module-card reveal" ${moduleAttrs} data-reorder-id="${escapeHtml(module.id)}" data-link="#">
           <button class="rail-item" type="button">
             <span class="rail-title">
               ${escapeHtml(module.name)}
@@ -212,9 +212,10 @@ const updatePolicyTotal = (modules, org, stats = {}) => {
   const label = document.querySelector("[data-policy-total]");
   if (label) {
     const moduleCount = modules.length;
-    label.textContent = `${moduleCount} ${moduleCount === 1 ? "module" : "modules"} | ${uploaded} ${
-      uploaded === 1 ? "policy" : "policies"
-    }`;
+    const policyText = `${uploaded} ${uploaded === 1 ? "policy" : "policies"}`;
+    label.textContent = org?.policy_display_mode === "direct"
+      ? policyText
+      : `${moduleCount} ${moduleCount === 1 ? "module" : "modules"} | ${policyText}`;
   }
   const kicker = document.querySelector(".policy-kicker");
   if (kicker && org?.name) {

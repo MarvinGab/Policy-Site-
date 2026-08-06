@@ -232,6 +232,23 @@
         </span>
       </label>
     </fieldset>
+    <fieldset class="settings-fieldset policy-display-fieldset">
+      <legend>Policy display</legend>
+      <label class="settings-radio">
+        <input type="radio" name="policy_display_mode" value="module" />
+        <span>
+          <strong>Module View</strong>
+          <em>Policies grouped into module cards. Ask Genie stays a floating assistant.</em>
+        </span>
+      </label>
+      <label class="settings-radio">
+        <input type="radio" name="policy_display_mode" value="direct" />
+        <span>
+          <strong>Direct Policy View</strong>
+          <em>Every policy listed directly, with Ask Genie as a full-width workspace below it.</em>
+        </span>
+      </label>
+    </fieldset>
     <button class="admin-add-btn" type="submit">Save settings</button>
   </form>
 </section>
@@ -315,7 +332,14 @@
         <div class="brand-preview brand-preview--logo" data-preview="logo_file" hidden><img alt="Logo preview" /></div>
       </div>
     </fieldset>
-    <div class="branding-actions"><button class="btn ghost" type="button" data-discard-branding disabled hidden>Discard changes</button><button class="btn primary branding-save" type="submit" data-save-branding disabled hidden>Save changes</button></div>
+    <div class="branding-actions">
+      <button class="btn primary branding-save" type="submit" data-save-branding hidden>Save changes</button>
+      <button class="btn ghost" type="button" data-discard-branding hidden>Discard changes</button>
+      <span class="branding-saved" data-branding-saved hidden role="status">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" /></svg>
+        Saved changes
+      </span>
+    </div>
   </form>
 </section>
 

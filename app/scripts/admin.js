@@ -71,6 +71,7 @@ export const initAdmin = () => {
   let emailTemplates = [];
   let activeTemplateId = null;
   let accessMode = "standalone";
+  let policyDisplayMode = "module";
   let orgLoginUrl = "";
   let hrmsSettings = null;
 
@@ -123,9 +124,14 @@ export const initAdmin = () => {
       const data = await apiJson("/api/org/settings");
       accessMode = data.access_mode || "standalone";
       orgLoginUrl = data.login_url || "";
+      policyDisplayMode = data.policy_display_mode || "module";
       if (settingsForm) {
         const radio = settingsForm.querySelector(`input[name="access_mode"][value="${accessMode}"]`);
         if (radio) radio.checked = true;
+        const displayRadio = settingsForm.querySelector(
+          `input[name="policy_display_mode"][value="${policyDisplayMode}"]`
+        );
+        if (displayRadio) displayRadio.checked = true;
         const branding = data.branding || {};
         const setValue = (name, value) => { const input = settingsForm.elements[name]; if (input && value) input.value = value; };
         setValue("theme_id", branding.theme_id || "default");
@@ -298,14 +304,30 @@ export const initAdmin = () => {
       logo_url: logoFile?.name || (brandingState.logoCleared ? "" : savedBrandingSnapshot?.logo_url || ""),
     };
   };
+  // Resting state shows nothing at all. Editing reveals Save + Discard; either
+  // one returns to rest with a short-lived confirmation on the way.
+  let brandingSavedTimer = 0;
+  const showBrandingSaved = () => {
+    const pill = brandingForm?.querySelector("[data-branding-saved]");
+    if (!pill) return;
+    clearTimeout(brandingSavedTimer);
+    pill.hidden = false;
+    brandingSavedTimer = setTimeout(() => {
+      pill.hidden = true;
+    }, 4000);
+  };
   const setBrandingDirty = (dirty) => {
     const save = brandingForm?.querySelector("[data-save-branding]");
     const discard = brandingForm?.querySelector("[data-discard-branding]");
     [save, discard].forEach((button) => {
-      if (!button) return;
-      button.toggleAttribute("disabled", !dirty);
-      button.hidden = !dirty;
+      if (button) button.hidden = !dirty;
     });
+    // Editing again supersedes any confirmation still on screen.
+    if (dirty) {
+      clearTimeout(brandingSavedTimer);
+      const pill = brandingForm?.querySelector("[data-branding-saved]");
+      if (pill) pill.hidden = true;
+    }
   };
   const updateBrandingDirty = () => {
     setBrandingDirty(JSON.stringify(getCurrentBrandingSnapshot()) !== JSON.stringify(savedBrandingSnapshot || normalizeBranding()));
@@ -380,9 +402,17 @@ export const initAdmin = () => {
 
   brandingForm?.addEventListener("input", updateBrandingDirty);
   brandingForm?.addEventListener("change", updateBrandingDirty);
+  // Discard: re-read what's actually stored and repaint the form from it, so
+  // unsaved edits (including a picked-but-unsent logo/background file) are
+  // dropped.
   brandingForm?.querySelector("[data-discard-branding]")?.addEventListener("click", async () => {
-    const data = await apiJson("/api/org/settings");
-    populateBranding(data.branding || {});
+    try {
+      const data = await apiJson("/api/org/settings");
+      populateBranding(data.branding || {});
+      showBrandingSaved();
+    } catch (error) {
+      showToast(error.message || "Could not discard changes.", "error");
+    }
   });
 
   brandingForm?.querySelector("[data-theme-swatches]")?.addEventListener("click", (event) => {
@@ -438,12 +468,15 @@ export const initAdmin = () => {
     const selected = settingsForm.querySelector('input[name="access_mode"]:checked')?.value;
     if (!selected) return;
     try {
-      const payload = { access_mode: selected };
+      const selectedDisplay =
+        settingsForm.querySelector('input[name="policy_display_mode"]:checked')?.value || policyDisplayMode;
+      const payload = { access_mode: selected, policy_display_mode: selectedDisplay };
       const data = await apiJson("/api/org/settings", {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
       accessMode = data.access_mode || selected;
+      policyDisplayMode = data.policy_display_mode || selectedDisplay;
       applyAccessMode();
       if (accessMode === "standalone") {
         await loadPeople();
@@ -494,8 +527,10 @@ export const initAdmin = () => {
       else if (brandingState.logoCleared) payload.logo_url = "";
 
       const data = await apiJson("/api/org/settings", { method: "PATCH", body: JSON.stringify(payload) });
+      // populateBranding resets the dirty snapshot, which hides both buttons —
+      // so the confirmation has to be raised after it, not before.
       populateBranding(data.branding || (await apiJson("/api/org/settings")).branding || {});
-      showToast("Branding saved.", "info");
+      showBrandingSaved();
       // Reflect the theme immediately and refresh the per-host cache so it's
       // enforced on the next load without a stale flash.
       const chosen = payload.theme_id;

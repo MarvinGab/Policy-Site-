@@ -38,6 +38,42 @@ export const initChatbot = () => {
 
   close?.addEventListener("click", () => setOpen(false));
 
+  // Disclaimer popover wiring — DELEGATED at document level so it works for
+  // both the floating panel and the inline direct-view composer (which is
+  // rendered dynamically). CSS handles hover; this adds tap-to-toggle,
+  // click-away / Escape close, and the EN/हिं language switch.
+  const closeAllInfo = () => {
+    document.querySelectorAll("[data-chatbot-info].is-open").forEach((el) => {
+      el.classList.remove("is-open");
+      el.querySelector(".chatbot-info-btn")?.setAttribute("aria-expanded", "false");
+    });
+  };
+  document.addEventListener("click", (event) => {
+    const langBtn = event.target.closest(".chatbot-info-lang");
+    if (langBtn) {
+      event.stopPropagation();
+      const box = langBtn.closest("[data-chatbot-info]");
+      const lang = langBtn.dataset.lang;
+      box?.querySelectorAll(".chatbot-info-lang").forEach((b) => b.classList.toggle("is-active", b === langBtn));
+      box?.querySelectorAll(".chatbot-info-text").forEach((t) => { t.hidden = t.dataset.infoLang !== lang; });
+      return;
+    }
+    const btn = event.target.closest(".chatbot-info-btn");
+    if (btn) {
+      event.stopPropagation();
+      const box = btn.closest("[data-chatbot-info]");
+      const open = !box.classList.contains("is-open");
+      closeAllInfo();
+      box.classList.toggle("is-open", open);
+      btn.setAttribute("aria-expanded", String(open));
+      return;
+    }
+    if (!event.target.closest("[data-chatbot-info]")) closeAllInfo();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAllInfo();
+  });
+
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-chatbot]")) return;
     setOpen(false);
@@ -134,6 +170,62 @@ const appendMessage = (container, text, variant, options = {}) => {
 
 const CHAT_STORAGE_PREFIX = "policy-chat-history-v5";
 let activeChatStorageKey = `${CHAT_STORAGE_PREFIX}:${window.location.hostname || "local"}`;
+
+/**
+ * Ask Genie a question.
+ *
+ * The single call site for /api/chat, shared by the floating assistant and
+ * the Direct Policy View workspace. Retrieval, prompting and answer
+ * generation all live server-side and are untouched by either surface —
+ * these two differ only in how the answer is presented.
+ */
+export const askGenie = async ({ question, history = [] }) => {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ question, history }),
+  });
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    const payload = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : null;
+    const message = payload?.answer || payload?.message || (await response.text());
+    throw new Error(message || "Unable to answer right now.");
+  }
+  const data = await response.json();
+  return cleanBotMessage(data?.answer || "I don't have enough information to answer that.");
+};
+
+export { cleanBotMessage, toApiHistory, saveChatHistory };
+
+/**
+ * History for the Direct View workspace.
+ *
+ * Same localStorage record as the floating assistant, so a conversation
+ * survives switching display modes — but without the "Hi! How can I help
+ * you?" seed. The workspace has a designed empty state; a greeting bubble
+ * would mean it never gets shown.
+ */
+export const loadGenieConversation = () => {
+  const history = loadChatHistory();
+  if (history.length === 1 && history[0]?.variant === "bot" && /^Hi! How can I help/.test(history[0].text)) {
+    return [];
+  }
+  return history;
+};
+
+/**
+ * Resolve the per-organization storage key, then hand back that org's
+ * history. Until this settles the key is hostname-based, which is already
+ * org-scoped on subdomains; this pins it to the company id.
+ */
+export const syncGenieStorage = async () => {
+  const key = await resolveChatStorageKey();
+  if (key && key !== activeChatStorageKey) activeChatStorageKey = key;
+  return loadGenieConversation();
+};
 
 const resolveChatStorageKey = async () => {
   try {

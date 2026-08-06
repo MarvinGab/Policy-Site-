@@ -5,7 +5,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 48px 10px;
+  padding: 10px 48px 8px;
   background: transparent;
   border-bottom: 1px solid transparent;
   transition: background 300ms ease;
@@ -32,6 +32,58 @@
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
   transition: box-shadow 300ms ease, background 300ms ease, border-color 300ms ease, transform 300ms ease;
+}
+
+body[data-page="policies"] .site-header {
+  padding-inline: var(--policy-page-gutter, 48px);
+}
+
+body[data-page="policies"] .header-shell {
+  width: var(--policy-page-width, min(1200px, 100%));
+  min-height: clamp(52px, 3.3vw, 64px);
+  padding: clamp(4px, 0.35vw, 7px) clamp(18px, 1.35vw, 32px);
+  gap: clamp(18px, 2.2vw, 48px);
+}
+
+body[data-page="policies"] .logo-wrap {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+body[data-page="policies"] .header-logo {
+  height: clamp(38px, 2.45vw, 52px);
+}
+
+body[data-page="policies"] .header-nav {
+  flex: 0 1 960px;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: clamp(14px, 1.4vw, 28px);
+}
+
+body[data-page="policies"] .header-links {
+  flex: 1 1 340px;
+  justify-content: flex-end;
+  min-width: 220px;
+}
+
+body[data-page="policies"] .header-ctas {
+  flex: 0 0 auto;
+  gap: clamp(12px, 1.1vw, 24px);
+}
+
+body[data-page="policies"] .header-policy .policy-kicker {
+  font-size: clamp(0.68rem, 0.45vw, 0.84rem);
+}
+
+body[data-page="policies"] .header-policy .policy-total {
+  font-size: clamp(0.9rem, 0.72vw, 1.14rem);
+}
+
+body[data-page="policies"] .header-ctas .btn {
+  min-height: clamp(34px, 2.15vw, 44px);
+  padding-inline: clamp(16px, 1.25vw, 24px);
+  font-size: clamp(0.84rem, 0.55vw, 0.96rem);
 }
 
 .site-header.scrolled .header-shell {
@@ -311,6 +363,28 @@ body[data-theme="carbon"] .header-logo-dark { display: block; }
   }
 }
 
+@media (max-width: 1180px) {
+  body[data-page="policies"] .site-header {
+    padding-inline: clamp(12px, 4vw, 48px);
+  }
+
+  body[data-page="policies"] .header-shell {
+    border-radius: 28px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  body[data-page="policies"] .logo-wrap {
+    flex-basis: 100%;
+  }
+
+  body[data-page="policies"] .header-nav {
+    width: 100%;
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+}
+
 @media (max-width: 640px) {
   .site-header {
     padding: 10px 12px 8px;
@@ -352,5 +426,20 @@ body[data-theme="carbon"] .header-logo-dark { display: block; }
   .header-ctas .btn {
     padding: 8px 13px;
     min-height: 36px;
+  }
+}
+
+@media (max-width: 640px) {
+  body[data-page="policies"] .header-shell {
+    display: grid;
+  }
+
+  body[data-page="policies"] .logo-wrap {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  body[data-page="policies"] .header-logo {
+    height: 38px;
   }
 }

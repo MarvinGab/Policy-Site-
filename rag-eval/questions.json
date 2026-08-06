@@ -1,0 +1,2692 @@
+[
+  {
+    "id": "trio-posh-001",
+    "question": "Who does the POSH policy apply to?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "The POSH policy applies to all employees of Trio Infrastructure Private Limited, including permanent, probationary, temporary, part-time, trainees, interns, consultants, and contractors.",
+    "expected_section": "2. SCOPE & APPLICABILITY",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-posh-001",
+    "required_fact_groups": [
+      [
+        "all employees"
+      ],
+      [
+        "permanent"
+      ],
+      [
+        "probationary"
+      ],
+      [
+        "temporary"
+      ],
+      [
+        "part-time",
+        "part time"
+      ],
+      [
+        "trainees",
+        "trainee"
+      ],
+      [
+        "interns",
+        "intern"
+      ],
+      [
+        "consultants",
+        "consultant"
+      ],
+      [
+        "contractors",
+        "contractor"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-001-lazy-1",
+    "question": "posh applies to whom",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "The POSH policy applies to all employees of Trio Infrastructure Private Limited, including permanent, probationary, temporary, part-time, trainees, interns, consultants, and contractors.",
+    "expected_section": "2. SCOPE & APPLICABILITY",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-001",
+    "required_fact_groups": [
+      [
+        "all employees"
+      ],
+      [
+        "permanent"
+      ],
+      [
+        "probationary"
+      ],
+      [
+        "temporary"
+      ],
+      [
+        "part-time",
+        "part time"
+      ],
+      [
+        "trainees",
+        "trainee"
+      ],
+      [
+        "interns",
+        "intern"
+      ],
+      [
+        "consultants",
+        "consultant"
+      ],
+      [
+        "contractors",
+        "contractor"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-001-lazy-2",
+    "question": "contractor posh me apply?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "Contractors are covered by the POSH policy.",
+    "expected_section": "2. SCOPE & APPLICABILITY",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-001",
+    "required_fact_groups": [
+      [
+        "yes",
+        "covered",
+        "applies",
+        "apply"
+      ],
+      [
+        "contractors",
+        "contractor"
+      ],
+      [
+        "POSH",
+        "sexual harassment"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-002",
+    "question": "How soon should I file a sexual harassment complaint?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "An aggrieved individual should file a written complaint within 90 days from the date of the last alleged incident.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-posh-002",
+    "required_fact_groups": [
+      [
+        "90"
+      ],
+      [
+        "days"
+      ],
+      [
+        "complaint"
+      ],
+      [
+        "last incident",
+        "last alleged incident"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-002-lazy-1",
+    "question": "posh complaint 90 days?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "An aggrieved individual should file a written complaint within 90 days from the date of the last alleged incident.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-002",
+    "required_fact_groups": [
+      [
+        "90"
+      ],
+      [
+        "days"
+      ],
+      [
+        "complaint"
+      ],
+      [
+        "last incident",
+        "last alleged incident"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-002-lazy-2",
+    "question": "harassment complaint kab tak",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "An aggrieved individual should file a written complaint within 90 days from the date of the last alleged incident.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-002",
+    "required_fact_groups": [
+      [
+        "90"
+      ],
+      [
+        "days"
+      ],
+      [
+        "complaint"
+      ],
+      [
+        "last incident",
+        "last alleged incident"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-003",
+    "question": "Can I send a POSH complaint directly to the external IC member?",
+    "category": "PROCEDURE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "If the aggrieved individual does not wish to file with the IC, they can send the complaint directly to the external IC member Kavita at thewayforward@kavitarathod.com.",
+    "expected_section": "5. RESPONSE TO POSSIBLE INCIDENTS OF SEXUAL HARASSMENT",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-posh-003",
+    "required_fact_groups": [
+      [
+        "external"
+      ],
+      [
+        "Kavita"
+      ],
+      [
+        "thewayforward@kavitarathod.com"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-003-lazy-1",
+    "question": "posh complaint where",
+    "category": "PROCEDURE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "A POSH complaint may be sent to any IC member, or directly to external IC member Kavita at the listed email if the complainant does not wish to file with the IC.",
+    "expected_section": "5. RESPONSE TO POSSIBLE INCIDENTS OF SEXUAL HARASSMENT",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-003",
+    "required_fact_groups": [
+      [
+        "IC",
+        "Internal Committee",
+        "HR",
+        "external",
+        "Kavita",
+        "thewayforward@kavitarathod.com"
+      ],
+      [
+        "complaint"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-003-lazy-2",
+    "question": "ic nahi jana can mail kavita?",
+    "category": "PROCEDURE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "If the aggrieved individual does not wish to file with the IC, they can send the complaint directly to the external IC member Kavita at thewayforward@kavitarathod.com.",
+    "expected_section": "5. RESPONSE TO POSSIBLE INCIDENTS OF SEXUAL HARASSMENT",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-003",
+    "required_fact_groups": [
+      [
+        "external"
+      ],
+      [
+        "Kavita"
+      ],
+      [
+        "thewayforward@kavitarathod.com"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-004",
+    "question": "What interim relief can the IC recommend during a POSH inquiry?",
+    "category": "PROCEDURE_MULTI_SENTENCE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "At the complainant's written request, the IC may recommend transfer to another team or workplace, restriction on respondent reporting on complainant performance, paid leave up to 3 months in addition to entitled leave, or other relief to ensure a fair inquiry process.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT / A. Complaint Handling Process",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-posh-004",
+    "required_fact_groups": [
+      [
+        "transfer"
+      ],
+      [
+        "restriction",
+        "respondent"
+      ],
+      [
+        "paid leave",
+        "leave"
+      ],
+      [
+        "3 months",
+        "three months"
+      ],
+      [
+        "interim"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-004-lazy-1",
+    "question": "posh interim relief kya milega",
+    "category": "PROCEDURE_MULTI_SENTENCE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "At the complainant's written request, the IC may recommend transfer to another team or workplace, restriction on respondent reporting on complainant performance, paid leave up to 3 months in addition to entitled leave, or other relief to ensure a fair inquiry process.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT / A. Complaint Handling Process",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-004",
+    "required_fact_groups": [
+      [
+        "transfer"
+      ],
+      [
+        "restriction",
+        "respondent"
+      ],
+      [
+        "paid leave",
+        "leave"
+      ],
+      [
+        "3 months",
+        "three months"
+      ],
+      [
+        "interim"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-004-lazy-2",
+    "question": "can i get leave during posh inquiry",
+    "category": "PROCEDURE_MULTI_SENTENCE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "Yes. At the complainant's written request, the IC may recommend paid leave up to 3 months during the POSH inquiry.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT / A. Complaint Handling Process",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-004",
+    "required_fact_groups": [
+      [
+        "yes",
+        "may",
+        "can"
+      ],
+      [
+        "paid leave",
+        "leave"
+      ],
+      [
+        "3 months",
+        "three months"
+      ],
+      [
+        "written request",
+        "request of the complainant",
+        "complainant"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-005",
+    "question": "How long does the IC have to complete a POSH inquiry?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "The policy states the IC must complete the inquiry within 90 working days from receipt of the complaint.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT / A. Complaint Handling Process",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-posh-005",
+    "required_fact_groups": [
+      [
+        "90"
+      ],
+      [
+        "working days"
+      ],
+      [
+        "inquiry",
+        "investigation"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "90 days from last incident"
+    ]
+  },
+  {
+    "id": "trio-posh-005-lazy-1",
+    "question": "ic inquiry how many days",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "The policy states the IC must complete the inquiry within 90 working days from receipt of the complaint.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT / A. Complaint Handling Process",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-005",
+    "required_fact_groups": [
+      [
+        "90"
+      ],
+      [
+        "working days"
+      ],
+      [
+        "inquiry",
+        "investigation"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "90 days from last incident"
+    ]
+  },
+  {
+    "id": "trio-posh-005-lazy-2",
+    "question": "posh investigation timeline?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "The policy states the IC must complete the inquiry within 90 working days from receipt of the complaint.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT / A. Complaint Handling Process",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-005",
+    "required_fact_groups": [
+      [
+        "90"
+      ],
+      [
+        "working days"
+      ],
+      [
+        "inquiry",
+        "investigation"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "90 days from last incident"
+    ]
+  },
+  {
+    "id": "trio-posh-005-followup-1",
+    "question": "and appeal kab tak?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "The complainant and respondent both have the right to appeal the decision within 90 days, as per Section 18 of the POSH Act.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT",
+    "should_answer": true,
+    "history": [
+      {
+        "role": "user",
+        "text": "How long does the IC have to complete a POSH inquiry?"
+      },
+      {
+        "role": "assistant",
+        "text": "The IC must complete the inquiry within 90 working days."
+      }
+    ],
+    "query_style": "FOLLOW_UP",
+    "canonical_id": "trio-posh-005",
+    "required_fact_groups": [
+      [
+        "appeal"
+      ],
+      [
+        "90"
+      ],
+      [
+        "days"
+      ],
+      [
+        "Section 18",
+        "POSH Act"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-006",
+    "question": "Who is the Presiding Officer of the SH-IC?",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "Latasha Gupta, Front Desk Executive, is listed as Presiding Officer (Chairperson) of the SH-IC.",
+    "expected_section": "9. APPENDIX-2 MEMBERS OF SH-IC",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-posh-006",
+    "required_fact_groups": [
+      [
+        "Latasha Gupta"
+      ],
+      [
+        "Presiding Officer",
+        "Chairperson"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-006-lazy-1",
+    "question": "sh ic chairperson who",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "Latasha Gupta, Front Desk Executive, is listed as Presiding Officer (Chairperson) of the SH-IC.",
+    "expected_section": "9. APPENDIX-2 MEMBERS OF SH-IC",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-006",
+    "required_fact_groups": [
+      [
+        "Latasha Gupta"
+      ],
+      [
+        "Presiding Officer",
+        "Chairperson"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-006-lazy-2",
+    "question": "latasha role in posh?",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "Latasha Gupta, Front Desk Executive, is listed as Presiding Officer (Chairperson) of the SH-IC.",
+    "expected_section": "9. APPENDIX-2 MEMBERS OF SH-IC",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-006",
+    "required_fact_groups": [
+      [
+        "Latasha Gupta"
+      ],
+      [
+        "Presiding Officer",
+        "Chairperson"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-007",
+    "question": "Is lack of evidence enough to make a POSH complaint malicious?",
+    "category": "DIRECT_FACT",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "No. The policy states that lack of evidence alone does not make a complaint false or malicious.",
+    "expected_section": "5. RESPONSE TO POSSIBLE INCIDENTS OF SEXUAL HARASSMENT / False or Malicious Complaints",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-posh-007",
+    "required_fact_groups": [
+      [
+        "lack of evidence",
+        "not supported by sufficient evidence"
+      ],
+      [
+        "not false",
+        "not malicious",
+        "does not make"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-007-lazy-1",
+    "question": "no proof means false complaint?",
+    "category": "DIRECT_FACT",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "No. The policy states that lack of evidence alone does not make a complaint false or malicious.",
+    "expected_section": "5. RESPONSE TO POSSIBLE INCIDENTS OF SEXUAL HARASSMENT / False or Malicious Complaints",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-007",
+    "required_fact_groups": [
+      [
+        "lack of evidence",
+        "not supported by sufficient evidence"
+      ],
+      [
+        "not false",
+        "not malicious",
+        "does not make"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-posh-007-lazy-2",
+    "question": "evidence nahi hai malicious?",
+    "category": "DIRECT_FACT",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "No. The policy states that lack of evidence alone does not make a complaint false or malicious.",
+    "expected_section": "5. RESPONSE TO POSSIBLE INCIDENTS OF SEXUAL HARASSMENT / False or Malicious Complaints",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-007",
+    "required_fact_groups": [
+      [
+        "lack of evidence",
+        "not supported by sufficient evidence"
+      ],
+      [
+        "not false",
+        "not malicious",
+        "does not make"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-001",
+    "question": "Does the Code of Conduct apply to interns and contractors?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "The Code applies to every employee, contractor, consultant, and associate, and specifically to full-time employees, part-time staff, interns, and third-party representatives acting on behalf of the Company.",
+    "expected_section": "1. Purpose & Scope",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-conduct-001",
+    "required_fact_groups": [
+      [
+        "employee"
+      ],
+      [
+        "contractor"
+      ],
+      [
+        "consultant"
+      ],
+      [
+        "associate"
+      ],
+      [
+        "intern"
+      ],
+      [
+        "third-party",
+        "third party"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-001-lazy-1",
+    "question": "code applies interns?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Yes. Interns are covered by the Code of Conduct.",
+    "expected_section": "1. Purpose & Scope",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-001",
+    "required_fact_groups": [
+      [
+        "yes",
+        "applies",
+        "covered"
+      ],
+      [
+        "interns",
+        "intern"
+      ],
+      [
+        "Code",
+        "Conduct"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-001-lazy-2",
+    "question": "contractor also code of conduct?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Yes. Contractors are covered by the Code of Conduct.",
+    "expected_section": "1. Purpose & Scope",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-001",
+    "required_fact_groups": [
+      [
+        "yes",
+        "applies",
+        "covered"
+      ],
+      [
+        "contractors",
+        "contractor"
+      ],
+      [
+        "Code",
+        "Conduct"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-002",
+    "question": "What is the limit for nominal gifts from clients or vendors?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Nominal gifts of token value under ₹500 in line with cultural norms are generally acceptable.",
+    "expected_section": "5. Conflict of Interest",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-conduct-002",
+    "required_fact_groups": [
+      [
+        "500",
+        "₹500",
+        "Rs. 500",
+        "Rs 500"
+      ],
+      [
+        "under",
+        "below",
+        "less than"
+      ],
+      [
+        "gift",
+        "gifts"
+      ],
+      [
+        "nominal",
+        "token"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "above 500",
+      "more than 500",
+      "over 500"
+    ]
+  },
+  {
+    "id": "trio-conduct-002-lazy-1",
+    "question": "gift limit?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Nominal gifts of token value under ₹500 in line with cultural norms are generally acceptable.",
+    "expected_section": "5. Conflict of Interest",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-002",
+    "required_fact_groups": [
+      [
+        "500",
+        "₹500",
+        "Rs. 500",
+        "Rs 500"
+      ],
+      [
+        "under",
+        "below",
+        "less than"
+      ],
+      [
+        "gift",
+        "gifts"
+      ],
+      [
+        "nominal",
+        "token"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "above 500",
+      "more than 500",
+      "over 500"
+    ]
+  },
+  {
+    "id": "trio-conduct-002-lazy-2",
+    "question": "vendor gift 500 ok?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Nominal gifts of token value under ₹500 in line with cultural norms are generally acceptable.",
+    "expected_section": "5. Conflict of Interest",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-002",
+    "required_fact_groups": [
+      [
+        "500",
+        "₹500",
+        "Rs. 500",
+        "Rs 500"
+      ],
+      [
+        "under",
+        "below",
+        "less than"
+      ],
+      [
+        "gift",
+        "gifts"
+      ],
+      [
+        "nominal",
+        "token"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "above 500",
+      "more than 500",
+      "over 500"
+    ]
+  },
+  {
+    "id": "trio-conduct-003",
+    "question": "Who should I tell if I have a conflict of interest?",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Employees must disclose personal, financial, or family relationships that may influence professional decisions to HR or their Reporting Manager.",
+    "expected_section": "5. Conflict of Interest",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-conduct-003",
+    "required_fact_groups": [
+      [
+        "HR"
+      ],
+      [
+        "Reporting Manager",
+        "manager"
+      ],
+      [
+        "disclose",
+        "tell",
+        "report"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-003-lazy-1",
+    "question": "conflict tell whom",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Conflicts should be disclosed to HR or the Reporting Manager.",
+    "expected_section": "5. Conflict of Interest",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-003",
+    "required_fact_groups": [
+      [
+        "HR",
+        "Reporting Manager",
+        "manager"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-003-lazy-2",
+    "question": "family relation disclose to who",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Employees must disclose personal, financial, or family relationships that may influence professional decisions to HR or their Reporting Manager.",
+    "expected_section": "5. Conflict of Interest",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-003",
+    "required_fact_groups": [
+      [
+        "HR"
+      ],
+      [
+        "Reporting Manager",
+        "manager"
+      ],
+      [
+        "disclose",
+        "tell",
+        "report"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-004",
+    "question": "Who can approve a public statement or media communication on behalf of the company?",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Media enquiries, press releases, or public statements on behalf of the Company must be approved by the Director before publication.",
+    "expected_section": "8. Social Media & External Communication",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-conduct-004",
+    "required_fact_groups": [
+      [
+        "Director"
+      ],
+      [
+        "approved",
+        "approval"
+      ],
+      [
+        "media",
+        "press",
+        "public statement"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-004-lazy-1",
+    "question": "press statement approval",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Press statements or public communications on behalf of the company require Director approval.",
+    "expected_section": "8. Social Media & External Communication",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-004",
+    "required_fact_groups": [
+      [
+        "Director"
+      ],
+      [
+        "approval",
+        "approved"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-004-lazy-2",
+    "question": "media query director approval?",
+    "category": "RESPONSIBILITY_APPROVAL",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Media enquiries, press releases, or public statements on behalf of the Company must be approved by the Director before publication.",
+    "expected_section": "8. Social Media & External Communication",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-004",
+    "required_fact_groups": [
+      [
+        "Director"
+      ],
+      [
+        "approved",
+        "approval"
+      ],
+      [
+        "media",
+        "press",
+        "public statement"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-005",
+    "question": "If I see a safety issue at a project site, who do I report it to?",
+    "category": "PROCEDURE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Unsafe conditions, near-misses, accidents, or injuries must be reported to the site supervisor or HR immediately.",
+    "expected_section": "7. Health, Safety & Environment",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-conduct-005",
+    "required_fact_groups": [
+      [
+        "site supervisor",
+        "supervisor"
+      ],
+      [
+        "HR"
+      ],
+      [
+        "immediately"
+      ],
+      [
+        "unsafe",
+        "near-miss",
+        "accident",
+        "injury",
+        "safety"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-005-lazy-1",
+    "question": "site accident report whom",
+    "category": "PROCEDURE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Site accidents or unsafe conditions must be reported to the site supervisor or HR.",
+    "expected_section": "7. Health, Safety & Environment",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-005",
+    "required_fact_groups": [
+      [
+        "site supervisor",
+        "supervisor",
+        "HR"
+      ],
+      [
+        "accident",
+        "injury",
+        "unsafe",
+        "near-miss",
+        "safety"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-005-lazy-2",
+    "question": "unsafe condition bolna kisko",
+    "category": "PROCEDURE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Unsafe conditions must be reported to the site supervisor or HR.",
+    "expected_section": "7. Health, Safety & Environment",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-005",
+    "required_fact_groups": [
+      [
+        "site supervisor",
+        "supervisor",
+        "HR"
+      ],
+      [
+        "unsafe",
+        "safety",
+        "condition"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-006",
+    "question": "What disciplinary actions can happen for Code of Conduct violations?",
+    "category": "PROCEDURE_MULTI_SENTENCE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Disciplinary measures may include verbal or written warning, suspension with or without pay pending investigation, forfeiture of benefits/incentives/accrued entitlements, termination for serious or repeated violations, or legal action for criminal conduct or significant financial loss.",
+    "expected_section": "11. Disciplinary Action",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-conduct-006",
+    "required_fact_groups": [
+      [
+        "warning"
+      ],
+      [
+        "suspension"
+      ],
+      [
+        "forfeiture",
+        "benefits",
+        "incentives",
+        "entitlements"
+      ],
+      [
+        "termination"
+      ],
+      [
+        "legal action"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-006-lazy-1",
+    "question": "conduct violation punishment",
+    "category": "PROCEDURE_MULTI_SENTENCE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Code violations can attract disciplinary action depending on severity, such as warning, suspension, termination, forfeiture, or legal action.",
+    "expected_section": "11. Disciplinary Action",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-006",
+    "required_fact_groups": [
+      [
+        "disciplinary",
+        "action",
+        "punishment",
+        "warning",
+        "suspension",
+        "termination",
+        "legal action"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-006-lazy-2",
+    "question": "code break what action",
+    "category": "PROCEDURE_MULTI_SENTENCE",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Breaking the Code can lead to disciplinary action, including warning, suspension, termination, forfeiture, or legal action depending on severity.",
+    "expected_section": "11. Disciplinary Action",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-006",
+    "required_fact_groups": [
+      [
+        "disciplinary",
+        "action",
+        "warning",
+        "suspension",
+        "termination",
+        "legal action"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-007",
+    "question": "Can I install software on company systems if it helps me work faster?",
+    "category": "NATURAL_EMPLOYEE_QUESTION",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Unauthorised installation of software, sharing login credentials, or access to restricted systems is prohibited.",
+    "expected_section": "6. Use of Company Assets & Technology",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-conduct-007",
+    "required_fact_groups": [
+      [
+        "unauthorised",
+        "unauthorized",
+        "not allowed",
+        "prohibited"
+      ],
+      [
+        "software"
+      ],
+      [
+        "installation",
+        "install"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-007-lazy-1",
+    "question": "can install software laptop",
+    "category": "NATURAL_EMPLOYEE_QUESTION",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Unauthorised installation of software, sharing login credentials, or access to restricted systems is prohibited.",
+    "expected_section": "6. Use of Company Assets & Technology",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-007",
+    "required_fact_groups": [
+      [
+        "unauthorised",
+        "unauthorized",
+        "not allowed",
+        "prohibited"
+      ],
+      [
+        "software"
+      ],
+      [
+        "installation",
+        "install"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-conduct-007-lazy-2",
+    "question": "software install allowed?",
+    "category": "NATURAL_EMPLOYEE_QUESTION",
+    "expected_document": "Code_of_Conduct_Trio.docx",
+    "expected_fact": "Unauthorised installation of software, sharing login credentials, or access to restricted systems is prohibited.",
+    "expected_section": "6. Use of Company Assets & Technology",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-conduct-007",
+    "required_fact_groups": [
+      [
+        "unauthorised",
+        "unauthorized",
+        "not allowed",
+        "prohibited"
+      ],
+      [
+        "software"
+      ],
+      [
+        "installation",
+        "install"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-001",
+    "question": "How many holidays are listed for 2026?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "The 2026 holiday list contains 10 holidays.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-holiday-001",
+    "required_fact_groups": [
+      [
+        "10"
+      ],
+      [
+        "holidays",
+        "holiday"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "9 holidays",
+      "11 holidays"
+    ]
+  },
+  {
+    "id": "trio-holiday-001-lazy-1",
+    "question": "holiday list",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Return the actual 2026 holiday list: Republic Day — 26-Jan-26; Holi — 03-Mar-26; Maharashtra Day — 01-May-26; Independence Day — 15-Aug-26; Ganesh Chaturthi — 14-Sep-26; Mahatma Gandhi Jayanti — 02-Oct-26; Dussehra — 20-Oct-26; Diwali-Govardhan Puja — 09-Nov-26; Diwali-Balipratipada/Bhai Dooj — 10-Nov-26; Christmas — 25-Dec-26.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-001",
+    "required_fact_groups": [
+      [
+        "Republic Day"
+      ],
+      [
+        "26-Jan-26",
+        "26 Jan"
+      ],
+      [
+        "Holi"
+      ],
+      [
+        "03-Mar-26",
+        "03 Mar"
+      ],
+      [
+        "Maharashtra Day"
+      ],
+      [
+        "01-May-26",
+        "01 May"
+      ],
+      [
+        "Independence Day"
+      ],
+      [
+        "15-Aug-26",
+        "15 Aug"
+      ],
+      [
+        "Ganesh Chaturthi"
+      ],
+      [
+        "14-Sep-26",
+        "14 Sep"
+      ],
+      [
+        "Mahatma Gandhi Jayanti"
+      ],
+      [
+        "02-Oct-26",
+        "02 Oct"
+      ],
+      [
+        "Dussehra"
+      ],
+      [
+        "20-Oct-26",
+        "20 Oct"
+      ],
+      [
+        "Diwali-Govardhan Puja"
+      ],
+      [
+        "09-Nov-26",
+        "09 Nov",
+        "9 Nov"
+      ],
+      [
+        "Diwali-Balipratipada/Bhai Dooj",
+        "Balipratipada",
+        "Bhai Dooj"
+      ],
+      [
+        "10-Nov-26",
+        "10 Nov"
+      ],
+      [
+        "Christmas"
+      ],
+      [
+        "25-Dec-26",
+        "25 Dec"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "9 holidays",
+      "11 holidays"
+    ]
+  },
+  {
+    "id": "trio-holiday-001-lazy-2",
+    "question": "how many holiday 2026",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "The 2026 holiday list contains 10 holidays.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-001",
+    "required_fact_groups": [
+      [
+        "10"
+      ],
+      [
+        "holidays",
+        "holiday"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "9 holidays",
+      "11 holidays"
+    ]
+  },
+  {
+    "id": "trio-holiday-002",
+    "question": "What date is Ganesh Chaturthi holiday in 2026?",
+    "category": "DIRECT_FACT",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Ganesh Chaturthi is listed on 14-Sep-26, Monday, in September.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-holiday-002",
+    "required_fact_groups": [
+      [
+        "Ganesh Chaturthi",
+        "Ganpati"
+      ],
+      [
+        "14-Sep-26",
+        "14 Sep",
+        "14 September"
+      ],
+      [
+        "Monday"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-002-lazy-1",
+    "question": "ganesh chaturthi off when",
+    "category": "DIRECT_FACT",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Ganesh Chaturthi is listed on 14-Sep-26, Monday, in September.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-002",
+    "required_fact_groups": [
+      [
+        "Ganesh Chaturthi",
+        "Ganpati"
+      ],
+      [
+        "14-Sep-26",
+        "14 Sep",
+        "14 September"
+      ],
+      [
+        "Monday"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-002-lazy-2",
+    "question": "ganpati holiday date",
+    "category": "DIRECT_FACT",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Ganesh Chaturthi is listed on 14-Sep-26, Monday, in September.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-002",
+    "required_fact_groups": [
+      [
+        "Ganesh Chaturthi",
+        "Ganpati"
+      ],
+      [
+        "14-Sep-26",
+        "14 Sep",
+        "14 September"
+      ],
+      [
+        "Monday"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-003",
+    "question": "Are site-based employees always off on public holidays?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "No. Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-holiday-003",
+    "required_fact_groups": [
+      [
+        "site-based",
+        "site based",
+        "site"
+      ],
+      [
+        "may be required to work",
+        "required to work",
+        "work on public holidays"
+      ],
+      [
+        "Comp-Off",
+        "Compensatory Off",
+        "comp off"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-003-lazy-1",
+    "question": "site public holiday work?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "No. Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-003",
+    "required_fact_groups": [
+      [
+        "site-based",
+        "site based",
+        "site"
+      ],
+      [
+        "may be required to work",
+        "required to work",
+        "work on public holidays"
+      ],
+      [
+        "Comp-Off",
+        "Compensatory Off",
+        "comp off"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-003-lazy-2",
+    "question": "public holiday site employee comp off?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "No. Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-003",
+    "required_fact_groups": [
+      [
+        "site-based",
+        "site based",
+        "site"
+      ],
+      [
+        "may be required to work",
+        "required to work",
+        "work on public holidays"
+      ],
+      [
+        "Comp-Off",
+        "Compensatory Off",
+        "comp off"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-004",
+    "question": "Which Diwali holidays are listed in 2026?",
+    "category": "DIRECT_FACT",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Diwali-Govardhan Puja is listed on 09-Nov-26, Monday, and Diwali-Balipratipada/Bhai Dooj is listed on 10-Nov-26, Tuesday.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-holiday-004",
+    "required_fact_groups": [
+      [
+        "Diwali-Govardhan Puja",
+        "Govardhan"
+      ],
+      [
+        "09-Nov-26",
+        "9 Nov",
+        "09 Nov"
+      ],
+      [
+        "Diwali-Balipratipada/Bhai Dooj",
+        "Balipratipada",
+        "Bhai Dooj"
+      ],
+      [
+        "10-Nov-26",
+        "10 Nov"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-004-lazy-1",
+    "question": "diwali off when",
+    "category": "DIRECT_FACT",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Diwali-Govardhan Puja is listed on 09-Nov-26, Monday, and Diwali-Balipratipada/Bhai Dooj is listed on 10-Nov-26, Tuesday.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-004",
+    "required_fact_groups": [
+      [
+        "Diwali-Govardhan Puja",
+        "Govardhan"
+      ],
+      [
+        "09-Nov-26",
+        "9 Nov",
+        "09 Nov"
+      ],
+      [
+        "Diwali-Balipratipada/Bhai Dooj",
+        "Balipratipada",
+        "Bhai Dooj"
+      ],
+      [
+        "10-Nov-26",
+        "10 Nov"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-004-lazy-2",
+    "question": "diwali holidays 2026 dates",
+    "category": "DIRECT_FACT",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Diwali-Govardhan Puja is listed on 09-Nov-26, Monday, and Diwali-Balipratipada/Bhai Dooj is listed on 10-Nov-26, Tuesday.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-004",
+    "required_fact_groups": [
+      [
+        "Diwali-Govardhan Puja",
+        "Govardhan"
+      ],
+      [
+        "09-Nov-26",
+        "9 Nov",
+        "09 Nov"
+      ],
+      [
+        "Diwali-Balipratipada/Bhai Dooj",
+        "Balipratipada",
+        "Bhai Dooj"
+      ],
+      [
+        "10-Nov-26",
+        "10 Nov"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-holiday-004-followup-1",
+    "question": "and site people if they work?",
+    "category": "DIRECT_FACT",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Site-based roles may be required to work on public holidays based on project and operational requirements, and in such cases employees are eligible for Comp-Off as per policy.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "history": [
+      {
+        "role": "user",
+        "text": "Which Diwali holidays are listed in 2026?"
+      },
+      {
+        "role": "assistant",
+        "text": "Diwali-Govardhan Puja is on 09-Nov-26 and Diwali-Balipratipada/Bhai Dooj is on 10-Nov-26."
+      }
+    ],
+    "query_style": "FOLLOW_UP",
+    "canonical_id": "trio-holiday-004",
+    "required_fact_groups": [
+      [
+        "site-based",
+        "site based",
+        "site"
+      ],
+      [
+        "may be required to work",
+        "required to work",
+        "work"
+      ],
+      [
+        "Comp-Off",
+        "Compensatory Off",
+        "comp off"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-001",
+    "question": "How much annual leave do confirmed employees get?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Confirmed employees are entitled to 18 working days of Annual Leave per year.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-001",
+    "required_fact_groups": [
+      [
+        "18"
+      ],
+      [
+        "working days"
+      ],
+      [
+        "Annual Leave",
+        "AL"
+      ],
+      [
+        "confirmed employees",
+        "confirmed"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "sick leave",
+      "casual leave",
+      "maternity leave",
+      "paternity leave"
+    ]
+  },
+  {
+    "id": "trio-leave-001-lazy-1",
+    "question": "how many leaves",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Employees get 18 working days of Annual Leave per year.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-001",
+    "required_fact_groups": [
+      [
+        "18"
+      ],
+      [
+        "working days"
+      ],
+      [
+        "Annual Leave",
+        "AL",
+        "leave"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "sick leave",
+      "casual leave",
+      "maternity leave",
+      "paternity leave"
+    ]
+  },
+  {
+    "id": "trio-leave-001-lazy-2",
+    "question": "annual leave kitna",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Confirmed employees are entitled to 18 working days of Annual Leave per year.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-001",
+    "required_fact_groups": [
+      [
+        "18"
+      ],
+      [
+        "working days"
+      ],
+      [
+        "Annual Leave",
+        "AL"
+      ],
+      [
+        "confirmed employees",
+        "confirmed"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "sick leave",
+      "casual leave",
+      "maternity leave",
+      "paternity leave"
+    ]
+  },
+  {
+    "id": "trio-leave-001-followup-1",
+    "question": "what about probation?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "history": [
+      {
+        "role": "user",
+        "text": "How much annual leave do confirmed employees get?"
+      },
+      {
+        "role": "assistant",
+        "text": "Confirmed employees get 18 working days of Annual Leave per year."
+      }
+    ],
+    "query_style": "FOLLOW_UP",
+    "canonical_id": "trio-leave-001",
+    "required_fact_groups": [
+      [
+        "probation"
+      ],
+      [
+        "not permitted",
+        "not allowed",
+        "cannot"
+      ],
+      [
+        "accrue",
+        "continues to accrue"
+      ],
+      [
+        "confirmation",
+        "confirmed"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-002",
+    "question": "Do I get leave during probation?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-002",
+    "required_fact_groups": [
+      [
+        "probation"
+      ],
+      [
+        "not permitted",
+        "not allowed",
+        "cannot"
+      ],
+      [
+        "accrue",
+        "continues to accrue"
+      ],
+      [
+        "confirmation",
+        "confirmed"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-002-lazy-1",
+    "question": "probation leave allowed?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-002",
+    "required_fact_groups": [
+      [
+        "probation"
+      ],
+      [
+        "not permitted",
+        "not allowed",
+        "cannot"
+      ],
+      [
+        "accrue",
+        "continues to accrue"
+      ],
+      [
+        "confirmation",
+        "confirmed"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-002-lazy-2",
+    "question": "new joiner can take leave?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Leave is not permitted during probation, but leave entitlement continues to accrue and is credited upon confirmation.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-002",
+    "required_fact_groups": [
+      [
+        "probation"
+      ],
+      [
+        "not permitted",
+        "not allowed",
+        "cannot"
+      ],
+      [
+        "accrue",
+        "continues to accrue"
+      ],
+      [
+        "confirmation",
+        "confirmed"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-003",
+    "question": "How many annual leave days can I carry forward after 31 March?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Employees may carry forward a maximum of 5 unutilised Annual Leave days to the next year; any balance above 5 lapses automatically on 31 March.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-003",
+    "required_fact_groups": [
+      [
+        "5"
+      ],
+      [
+        "carry forward",
+        "carried-forward"
+      ],
+      [
+        "Annual Leave",
+        "AL"
+      ],
+      [
+        "31 March",
+        "31st March"
+      ],
+      [
+        "lapse",
+        "laps"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-003-lazy-1",
+    "question": "al carry forward max",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Employees may carry forward a maximum of 5 unutilised Annual Leave days to the next year; any balance above 5 lapses automatically on 31 March.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-003",
+    "required_fact_groups": [
+      [
+        "5"
+      ],
+      [
+        "carry forward",
+        "carried-forward"
+      ],
+      [
+        "Annual Leave",
+        "AL"
+      ],
+      [
+        "31 March",
+        "31st March"
+      ],
+      [
+        "lapse",
+        "laps"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-003-lazy-2",
+    "question": "5 leaves carry forward?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Yes. Up to 5 Annual Leave days can be carried forward.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-003",
+    "required_fact_groups": [
+      [
+        "yes",
+        "can",
+        "may"
+      ],
+      [
+        "5"
+      ],
+      [
+        "carry forward"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-004",
+    "question": "If a weekly off or fixed holiday falls between my annual leave dates, is it counted as annual leave?",
+    "category": "CONFUSABLE_OVERLAP",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "No. Leave is counted on the working day principle, and an intermediate Weekly Off or Fixed Holiday sandwiched between AL dates will not be treated as AL.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-004",
+    "required_fact_groups": [
+      [
+        "Weekly Off",
+        "weekly off"
+      ],
+      [
+        "Fixed Holiday",
+        "holiday"
+      ],
+      [
+        "not treated as AL",
+        "not counted",
+        "will not be treated"
+      ],
+      [
+        "working day principle",
+        "sandwiched"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-004-lazy-1",
+    "question": "holiday between leave counted?",
+    "category": "CONFUSABLE_OVERLAP",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "A fixed holiday between Annual Leave dates is not counted as Annual Leave.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-004",
+    "required_fact_groups": [
+      [
+        "holiday"
+      ],
+      [
+        "not counted",
+        "not treated",
+        "will not be treated"
+      ],
+      [
+        "Annual Leave",
+        "AL",
+        "leave"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-004-lazy-2",
+    "question": "weekly off sandwich al count?",
+    "category": "CONFUSABLE_OVERLAP",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "A weekly off sandwiched between AL dates is not counted as AL.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-004",
+    "required_fact_groups": [
+      [
+        "weekly off"
+      ],
+      [
+        "not counted",
+        "not treated",
+        "will not be treated"
+      ],
+      [
+        "Annual Leave",
+        "AL"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-005",
+    "question": "How much maternity leave is available for the first two surviving children?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Eligible female employees are entitled to 26 weeks of paid maternity leave for the first two surviving children.",
+    "expected_section": "4.4 Maternity Leave",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-005",
+    "required_fact_groups": [
+      [
+        "26"
+      ],
+      [
+        "weeks"
+      ],
+      [
+        "maternity leave"
+      ],
+      [
+        "first two",
+        "2 surviving children",
+        "two surviving children"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-005-lazy-1",
+    "question": "maternity leave weeks",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Eligible female employees are entitled to 26 weeks of paid maternity leave for the first two surviving children.",
+    "expected_section": "4.4 Maternity Leave",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-005",
+    "required_fact_groups": [
+      [
+        "26"
+      ],
+      [
+        "weeks"
+      ],
+      [
+        "maternity leave"
+      ],
+      [
+        "first two",
+        "2 surviving children",
+        "two surviving children"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-005-lazy-2",
+    "question": "first baby maternity kitna",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "For the first child, eligible employees get 26 weeks of paid maternity leave.",
+    "expected_section": "4.4 Maternity Leave",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-005",
+    "required_fact_groups": [
+      [
+        "26"
+      ],
+      [
+        "weeks"
+      ],
+      [
+        "maternity"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-006",
+    "question": "What is the eligibility requirement for maternity leave?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Eligibility requires at least 80 days of actual service with the Company in the 12 months immediately preceding the expected delivery date.",
+    "expected_section": "4.4 Maternity Leave",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-006",
+    "required_fact_groups": [
+      [
+        "80"
+      ],
+      [
+        "days"
+      ],
+      [
+        "12 months"
+      ],
+      [
+        "expected date of delivery",
+        "delivery date"
+      ],
+      [
+        "actual service"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-006-lazy-1",
+    "question": "maternity eligibility",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Eligibility requires at least 80 days of actual service with the Company in the 12 months immediately preceding the expected delivery date.",
+    "expected_section": "4.4 Maternity Leave",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-006",
+    "required_fact_groups": [
+      [
+        "80"
+      ],
+      [
+        "days"
+      ],
+      [
+        "12 months"
+      ],
+      [
+        "expected date of delivery",
+        "delivery date"
+      ],
+      [
+        "actual service"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-006-lazy-2",
+    "question": "80 days maternity rule?",
+    "category": "ELIGIBILITY_SCOPE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Eligibility requires at least 80 days of actual service with the Company in the 12 months immediately preceding the expected delivery date.",
+    "expected_section": "4.4 Maternity Leave",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-006",
+    "required_fact_groups": [
+      [
+        "80"
+      ],
+      [
+        "days"
+      ],
+      [
+        "12 months"
+      ],
+      [
+        "expected date of delivery",
+        "delivery date"
+      ],
+      [
+        "actual service"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-007",
+    "question": "How many late arrivals or missed punch-ins become one day of annual leave?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Three instances of missed punch-ins or three instances of late arrivals beyond the flexibility period, or a combination totaling three in a month, count as one day of Annual Leave; without leave balance, the day is treated as LOP.",
+    "expected_section": "5.2 Working Hours, Late Arrivals & Missed Punch-Ins",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-007",
+    "required_fact_groups": [
+      [
+        "3"
+      ],
+      [
+        "late arrivals",
+        "late"
+      ],
+      [
+        "missed punch-ins",
+        "missed punch"
+      ],
+      [
+        "1",
+        "one"
+      ],
+      [
+        "Annual Leave",
+        "AL",
+        "LOP"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-007-lazy-1",
+    "question": "late 3 times?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Three late arrivals in a month count as one day of Annual Leave; if no leave balance is available, it is treated as LOP.",
+    "expected_section": "5.2 Working Hours, Late Arrivals & Missed Punch-Ins",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-007",
+    "required_fact_groups": [
+      [
+        "3"
+      ],
+      [
+        "late"
+      ],
+      [
+        "1",
+        "one"
+      ],
+      [
+        "Annual Leave",
+        "AL",
+        "LOP"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-007-lazy-2",
+    "question": "3 missed punch lop?",
+    "category": "NUMBERS_LIMITS_DATES",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Three missed punch-ins in a month count as one day of Annual Leave; if no leave balance is available, it is treated as LOP.",
+    "expected_section": "5.2 Working Hours, Late Arrivals & Missed Punch-Ins",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-007",
+    "required_fact_groups": [
+      [
+        "3"
+      ],
+      [
+        "missed punch",
+        "missed punch-ins"
+      ],
+      [
+        "1",
+        "one"
+      ],
+      [
+        "Annual Leave",
+        "AL",
+        "LOP"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-008",
+    "question": "Can I take annual leave during my notice period?",
+    "category": "PROCEDURE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "During notice period, Annual Leave or Comp-Off is subject to prior approval of the Reporting Manager and HR; leave without explicit approval extends the notice period by equivalent days unless waived by Management.",
+    "expected_section": "7. Leave During Notice Period",
+    "should_answer": true,
+    "query_style": "POLICY_LANGUAGE",
+    "canonical_id": "trio-leave-008",
+    "required_fact_groups": [
+      [
+        "notice period"
+      ],
+      [
+        "Annual Leave",
+        "AL",
+        "Comp-Off",
+        "comp off"
+      ],
+      [
+        "Reporting Manager",
+        "manager"
+      ],
+      [
+        "HR"
+      ],
+      [
+        "approval",
+        "prior approval"
+      ],
+      [
+        "extension",
+        "extend"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-008-lazy-1",
+    "question": "can i take al notice period",
+    "category": "PROCEDURE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Annual Leave during notice period requires prior approval from the Reporting Manager and HR.",
+    "expected_section": "7. Leave During Notice Period",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-008",
+    "required_fact_groups": [
+      [
+        "notice period"
+      ],
+      [
+        "Annual Leave",
+        "AL"
+      ],
+      [
+        "Reporting Manager",
+        "manager"
+      ],
+      [
+        "HR"
+      ],
+      [
+        "approval",
+        "prior approval"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-leave-008-lazy-2",
+    "question": "notice period leave approval?",
+    "category": "PROCEDURE",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Leave during notice period requires prior approval from the Reporting Manager and HR.",
+    "expected_section": "7. Leave During Notice Period",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-008",
+    "required_fact_groups": [
+      [
+        "notice period"
+      ],
+      [
+        "leave",
+        "Annual Leave",
+        "AL",
+        "Comp-Off",
+        "comp off"
+      ],
+      [
+        "Reporting Manager",
+        "manager"
+      ],
+      [
+        "HR"
+      ],
+      [
+        "approval",
+        "prior approval"
+      ]
+    ],
+    "forbidden_answer_terms": []
+  },
+  {
+    "id": "trio-unanswerable-001",
+    "question": "What is Trio infra's work from home policy for employees?",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "UNANSWERABLE",
+    "canonical_id": "trio-unanswerable-001",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-001-lazy-1",
+    "question": "wfh policy",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-001",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-001-lazy-2",
+    "question": "remote work allowed?",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-001",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-002",
+    "question": "How much internet reimbursement can I claim each month?",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "UNANSWERABLE",
+    "canonical_id": "trio-unanswerable-002",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-002-lazy-1",
+    "question": "internet reimbursement",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-002",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-002-lazy-2",
+    "question": "wifi bill claim kitna",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-002",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-003",
+    "question": "How many sick leave days do employees get?",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "UNANSWERABLE",
+    "canonical_id": "trio-unanswerable-003",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-003-lazy-1",
+    "question": "sick leave kitna",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-003",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-003-lazy-2",
+    "question": "how many sl",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-003",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-004",
+    "question": "What is the official travel allowance for site visits?",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "UNANSWERABLE",
+    "canonical_id": "trio-unanswerable-004",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-004-lazy-1",
+    "question": "site travel allowance",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-004",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-unanswerable-004-lazy-2",
+    "question": "travel claim for site visit?",
+    "category": "UNANSWERABLE",
+    "should_answer": false,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-unanswerable-004",
+    "information_present": false,
+    "required_fact_groups": []
+  },
+  {
+    "id": "trio-holiday-list-regression-001",
+    "question": "what is in holiday list",
+    "category": "LIST_CONTENT_REGRESSION",
+    "expected_document": "Holiday List.pdf",
+    "expected_fact": "Return the actual 2026 holiday list: Republic Day — 26-Jan-26; Holi — 03-Mar-26; Maharashtra Day — 01-May-26; Independence Day — 15-Aug-26; Ganesh Chaturthi — 14-Sep-26; Mahatma Gandhi Jayanti — 02-Oct-26; Dussehra — 20-Oct-26; Diwali-Govardhan Puja — 09-Nov-26; Diwali-Balipratipada/Bhai Dooj — 10-Nov-26; Christmas — 25-Dec-26.",
+    "expected_section": "HOLIDAY LIST | YEAR 2026",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-holiday-list-full",
+    "required_fact_groups": [
+      [
+        "Republic Day"
+      ],
+      [
+        "26-Jan-26",
+        "26 Jan"
+      ],
+      [
+        "Holi"
+      ],
+      [
+        "03-Mar-26",
+        "03 Mar"
+      ],
+      [
+        "Maharashtra Day"
+      ],
+      [
+        "01-May-26",
+        "01 May"
+      ],
+      [
+        "Independence Day"
+      ],
+      [
+        "15-Aug-26",
+        "15 Aug"
+      ],
+      [
+        "Ganesh Chaturthi"
+      ],
+      [
+        "14-Sep-26",
+        "14 Sep"
+      ],
+      [
+        "Mahatma Gandhi Jayanti"
+      ],
+      [
+        "02-Oct-26",
+        "02 Oct"
+      ],
+      [
+        "Dussehra"
+      ],
+      [
+        "20-Oct-26",
+        "20 Oct"
+      ],
+      [
+        "Diwali-Govardhan Puja"
+      ],
+      [
+        "09-Nov-26",
+        "09 Nov",
+        "9 Nov"
+      ],
+      [
+        "Diwali-Balipratipada/Bhai Dooj",
+        "Balipratipada",
+        "Bhai Dooj"
+      ],
+      [
+        "10-Nov-26",
+        "10 Nov"
+      ],
+      [
+        "Christmas"
+      ],
+      [
+        "25-Dec-26",
+        "25 Dec"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "10 holidays",
+      "public holidays as declared",
+      "generic public holidays"
+    ]
+  },
+  {
+    "id": "trio-leave-annual-leaves-regression-001",
+    "question": "how many Annual leaves",
+    "category": "REGRESSION_LAZY_NUMERIC",
+    "expected_document": "Trio_Leave & Attendance_Policy.pdf",
+    "expected_fact": "Confirmed employees are entitled to 18 working days of Annual Leave per year.",
+    "expected_section": "4.1 Annual Leave (AL)",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-leave-001",
+    "required_fact_groups": [
+      [
+        "18"
+      ],
+      [
+        "working days"
+      ],
+      [
+        "Annual Leave",
+        "AL",
+        "leave"
+      ],
+      [
+        "confirmed employees",
+        "confirmed"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "sick leave",
+      "casual leave",
+      "maternity leave",
+      "paternity leave"
+    ]
+  },
+  {
+    "id": "trio-posh-punishment-typo-regression-001",
+    "question": "what is teh punishment for POSH",
+    "category": "REGRESSION_LAZY_TYPO_CONSEQUENCE",
+    "expected_document": "POSH_Policy_TRIO.pdf",
+    "expected_fact": "If a POSH complaint is upheld, the IC may recommend disciplinary action depending on severity, including written apology, warning or reprimand, adverse service entry, withholding/cancellation of promotion, withholding increment or bonus, suspension or termination, counselling/behavioral correction, community service, or other corrective action.",
+    "expected_section": "8. REDRESSAL OF COMPLAINTS OF SEXUAL HARASSMENT / B. Disciplinary Actions",
+    "should_answer": true,
+    "query_style": "LAZY_EMPLOYEE",
+    "canonical_id": "trio-posh-disciplinary-action",
+    "required_fact_groups": [
+      [
+        "POSH",
+        "sexual harassment",
+        "harassment"
+      ],
+      [
+        "disciplinary action",
+        "punishment",
+        "consequence",
+        "action"
+      ],
+      [
+        "warning",
+        "reprimand",
+        "written apology",
+        "censure",
+        "adverse entry",
+        "withholding",
+        "suspension",
+        "termination",
+        "counselling",
+        "community service"
+      ]
+    ],
+    "forbidden_answer_terms": [
+      "sexual harassment is prohibited",
+      "harassment is prohibited",
+      "not allowed without consequences",
+      "only defines sexual harassment"
+    ],
+    "notes": "Real-user typo regression. Raw query must be evaluated exactly as written; do not normalize in the dataset."
+  }
+]

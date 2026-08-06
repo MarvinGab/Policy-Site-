@@ -37,9 +37,15 @@
   box-shadow: 0 16px 30px rgba(18, 22, 36, 0.18);
 }
 
+body[data-page="policies"] {
+  --policy-page-width: min(100%, clamp(680px, 92vw, 2280px));
+  --policy-page-gutter: max(16px, calc((100vw - var(--policy-page-width)) / 2));
+}
+
 body[data-page="policies"] .policy-dashboard {
   gap: 0;
   padding-top: 0;
+  padding-inline: var(--policy-page-gutter);
 }
 
 .dashboard-head {
@@ -79,6 +85,10 @@ body[data-page="policies"] .policy-dashboard {
   bottom: 208px;
 }
 
+.reorder-btn {
+  bottom: 320px;
+}
+
 .people-admin-btn,
 .hrms-admin-btn {
   bottom: 152px;
@@ -98,6 +108,17 @@ body[data-page="policies"] .policy-dashboard {
 
 .theme-btn:hover {
   filter: brightness(1.04);
+}
+
+.reorder-btn.is-active {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.reorder-btn.is-error {
+  background: var(--danger, #d94b4b);
+  color: #fff;
 }
 
 .theme-panel {
@@ -260,6 +281,11 @@ body[data-page="policies"] .policy-dashboard {
   position: relative;
   width: 210px;
   max-width: 210px;
+}
+
+body[data-page="policies"] .rail-search-field {
+  width: clamp(210px, 18vw, 390px);
+  max-width: min(390px, 100%);
 }
 
 .rail-search-field::before {
@@ -449,7 +475,10 @@ body[data-page="policies"] .policy-dashboard {
   border-radius: 0;
   padding: 20px;
   box-shadow: none;
-  max-width: 1060px;
+  /* No max-width. The dashboard already defines the canvas via its own 8vw
+     side padding, so the rail fills it and the modules line up with the page
+     title above them. Capping it here is what left ~1200px dead on each side
+     of a 32" display while the section itself measured the full 2150px. */
   width: 100%;
   position: sticky;
   top: 120px;
@@ -475,16 +504,37 @@ body[data-page="policies"] .policy-dashboard {
   font-weight: 600;
 }
 
+/* Wrapping flex rather than a fixed grid, for two reasons: the column count
+   has to change with the canvas, and `justify-content: center` centres a
+   partial last row for free. With 7 modules in 4 columns that turns a lonely
+   left-aligned orphan into a balanced 4 + 3. */
 .rail-list {
+  --rail-cols: 3;
+  --rail-gap: clamp(20px, 2vw, 40px);
   list-style: none;
   padding: 0;
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
-  gap: 36px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: stretch;
-  justify-items: stretch;
-  max-width: 940px;
+  gap: var(--rail-gap);
+}
+
+.is-reordering .rail-list {
+  overflow: clip;
+}
+
+.is-reordering .rail-list:has(.is-dragging) {
+  overflow: visible;
+}
+
+/* Four columns once there is genuinely room for them. Below this a 3-column
+   layout keeps cards at a comfortable width instead of stretching them. */
+@media (min-width: 1700px) {
+  .rail-list {
+    --rail-cols: 4;
+  }
 }
 
 .policy-module-card {
@@ -493,8 +543,12 @@ body[data-page="policies"] .policy-dashboard {
   user-select: none;
   height: 100%;
   z-index: 1;
+  flex: 0 1 calc((100% - (var(--rail-cols) - 1) * var(--rail-gap)) / var(--rail-cols));
+  min-width: 0;
 }
 
+/* Invisible bridge so the pointer can cross the gap from card to flyout
+   without the hover dropping. Follows the same side as the flyout itself. */
 .policy-module-card::after {
   content: "";
   position: absolute;
@@ -504,7 +558,7 @@ body[data-page="policies"] .policy-dashboard {
   height: 100%;
 }
 
-.policy-module-card:nth-child(3n)::after {
+.policy-module-card[data-flyout="left"]::after {
   right: auto;
   left: -24px;
 }
@@ -514,7 +568,7 @@ body[data-page="policies"] .policy-dashboard {
   border: 1px solid var(--outline);
   background: var(--panel);
   border-radius: 18px;
-  padding: 14px 16px;
+  padding: clamp(14px, 1.1vw, 22px) clamp(16px, 1.25vw, 26px);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -527,7 +581,9 @@ body[data-page="policies"] .policy-dashboard {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   height: 100%;
-  min-height: 200px;
+  /* Scales between breakpoints so the 3→4 column step isn't the only thing
+     responding to the canvas — cards breathe within each step too. */
+  min-height: clamp(190px, 15vw, 300px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
   transition: transform 220ms ease, box-shadow 220ms ease, border 220ms ease, background 220ms ease;
   position: relative;
@@ -535,7 +591,7 @@ body[data-page="policies"] .policy-dashboard {
 
 .rail-title {
   font-weight: 600;
-  font-size: 1rem;
+  font-size: clamp(0.98rem, 0.5vw + 0.78rem, 1.3rem);
   line-height: 1.2;
   display: inline-flex;
   align-items: baseline;
@@ -562,8 +618,8 @@ body[data-page="policies"] .policy-dashboard {
 }
 
 .rail-icon {
-  width: 120px;
-  height: 120px;
+  width: clamp(96px, 8.5vw, 170px);
+  height: clamp(96px, 8.5vw, 170px);
   object-fit: contain;
   opacity: 0.85;
   align-self: center;
@@ -576,12 +632,109 @@ body[data-page="policies"] .policy-dashboard {
   transform: translateY(-2px);
 }
 
+.is-reordering .policy-module-card {
+  cursor: grab;
+  touch-action: none;
+  contain: paint;
+}
+
+.is-reordering .policy-module-card .rail-item {
+  cursor: grab;
+  animation: reorder-wiggle 340ms ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.is-reordering .policy-module-card:nth-child(even) .rail-item {
+  animation-delay: -140ms;
+  animation-duration: 380ms;
+}
+
+.is-reordering .policy-module-card:nth-child(3n) .rail-item {
+  animation-delay: -210ms;
+  animation-duration: 310ms;
+}
+
+.is-reordering .policy-module-card:hover .rail-item {
+  transform: none;
+}
+
+.is-reordering .policy-module-card.is-dragging {
+  z-index: 20;
+  animation: none;
+  contain: none;
+}
+
+.is-reordering .policy-module-card.is-selected {
+  z-index: 5;
+}
+
+.is-reordering .policy-module-card.is-selected .rail-item {
+  animation: none;
+  transform: scale(1.035) translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--outline));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-solid, var(--panel-strong)) 86%);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 22px 44px rgba(18, 22, 36, 0.22);
+}
+
+.is-reordering .policy-module-card.is-selected .rail-item::before {
+  content: "✓";
+  right: 14px;
+  bottom: 12px;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  opacity: 1;
+}
+
+.is-reordering .policy-module-card.is-dragging .rail-item {
+  cursor: grabbing;
+  transform: scale(1.03);
+  box-shadow: 0 22px 44px rgba(18, 22, 36, 0.24);
+  animation: none;
+}
+
+.is-reordering .policy-module-card.is-drop-target .rail-item {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent), var(--shadow);
+}
+
+.is-reordering .policy-module-card:not(.is-selected) .rail-item::before {
+  content: "⋮⋮";
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  font-size: 0.82rem;
+  letter-spacing: -0.18em;
+  color: var(--ink-muted);
+  opacity: 0.55;
+}
+
 .flyout {
   position: absolute;
   left: calc(100% + 24px);
   top: 0;
-  width: min(520px, 62vw);
-  background: var(--panel);
+  /* `100%` here is the card's own width (the flyout is positioned against
+     it), so the panel stays proportional to the card, and the vw term lets
+     it also grow with the canvas. --flyout-space is measured in modules.js
+     and is the hard stop: the room actually available on this card's side.
+     The clamp alone was not enough — at 1280px a right-column flyout pushed
+     the document to 1321px, i.e. 41px of horizontal overflow that
+     `overflow-x: hidden` was silently clipping. */
+  width: clamp(340px, calc(100% + 5vw), 640px);
+  max-width: var(--flyout-space, 60vw);
+  /* Opaque, for the same reason the search dropdown is: --panel carries a
+     baked-in 0.94 alpha, so the card underneath bleeds through. That was
+     survivable when the panel was 520px on a 940px grid; with four columns
+     and a 640px panel it overlaps a neighbouring card almost every time. */
+  background: var(--surface-solid, var(--panel-strong));
   border-radius: 24px;
   border: 1px solid var(--outline);
   box-shadow: var(--shadow);
@@ -593,9 +746,13 @@ body[data-page="policies"] .policy-dashboard {
   z-index: 60;
 }
 
-.policy-module-card:nth-child(3n) .flyout {
+/* Which side the flyout opens on. Set from measurement in modules.js rather
+   than :nth-child(3n) — the column count is responsive now, and the centred
+   last row means "rightmost in its row" no longer follows from the index
+   (card 7 of 7 is rightmost in a centred row of 3, but is not a 4th child). */
+.policy-module-card[data-flyout="left"] .flyout {
   left: auto;
-  right: calc(100% + 18px);
+  right: calc(100% + 24px);
 }
 
 .policy-module-card:hover .flyout {
@@ -631,8 +788,15 @@ body[data-page="policies"] .policy-dashboard {
   margin: 14px 0 0;
   padding: 0;
   display: grid;
+  /* A wider flyout should reveal more policies, not more whitespace. A
+     ~390px panel stays single-column exactly as before; a 640px one splits
+     into two, roughly doubling what's visible without growing taller. */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
-  max-height: 260px;
+  /* Content-driven up to a viewport-proportional cap, bounded by the room
+     below this card's own top edge (measured in modules.js). A module with
+     three policies still gets a short panel. */
+  max-height: min(clamp(240px, 42vh, 520px), var(--flyout-vspace, 60vh));
   overflow-y: auto;
   color: var(--ink);
   user-select: none;
@@ -692,6 +856,22 @@ body[data-page="policies"] .policy-dashboard {
 @keyframes rail-policy-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes reorder-wiggle {
+  from {
+    transform: rotate(-0.65deg);
+  }
+  to {
+    transform: rotate(0.65deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-reordering .policy-module-card .rail-item,
+  .is-reordering .doc-row .doc-row__btn {
+    animation: none;
   }
 }
 
@@ -866,6 +1046,18 @@ body[data-page="policies"] .policy-dashboard {
 }
 
 
+/* ── Touch layout ──────────────────────────────────────────────────────────
+   There is no hover on touch, so below this width the flyout becomes an
+   accordion panel the card toggles open (see modules.js).
+
+   This block also fixes a real layout bug. The flyout used to be forced
+   permanently open here, while `.policy-module-card`/`.rail-item` kept
+   `height: 100%`. The button then claimed the whole stretched card height
+   and the now-static panel was laid out *after* it, spilling past the card's
+   own bottom edge — measured at 330px — onto the following card, which
+   painted over it. Every module's policy list appeared under the *next*
+   module's heading. Cards are content-height here so the panel pushes the
+   card taller instead of escaping it. */
 @media (max-width: 980px) {
   .dashboard-grid.rail-layout {
     justify-content: center;
@@ -875,21 +1067,56 @@ body[data-page="policies"] .policy-dashboard {
     position: static;
   }
 
+  .rail-list {
+    --rail-cols: 2;
+    align-items: start;
+  }
+
+  .policy-module-card,
+  .rail-item {
+    height: auto;
+  }
+
+  .rail-item {
+    min-height: 0;
+  }
+
   .flyout {
     position: static;
+    display: none;
     width: 100%;
+    max-width: none;
     margin-top: 10px;
     opacity: 1;
     transform: none;
     pointer-events: auto;
+    box-shadow: none;
+  }
+
+  .policy-module-card.is-open .flyout {
+    display: block;
   }
 
   .module-list {
     max-height: none;
+    grid-template-columns: 1fr;
   }
 
-  .rail-list {
-    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  /* Chevron affordance — without hover, nothing else signals that the card
+     opens. Rotates to point up while the panel is showing. */
+  .rail-item::after {
+    content: "";
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid var(--ink-muted);
+    border-bottom: 2px solid var(--ink-muted);
+    transform: rotate(45deg) translate(-2px, -2px);
+    transition: transform 200ms ease;
+  }
+
+  .policy-module-card.is-open .rail-item::after {
+    transform: rotate(-135deg);
   }
 }
 
@@ -902,8 +1129,32 @@ body[data-page="policies"] .policy-dashboard {
     justify-content: center;
   }
 
+  /* One column, and the card collapses from a 530px poster into a compact
+     row: icon, title, count, chevron. Seven modules then fit in roughly one
+     screen and a half instead of the 12,243px scroll this page produced. */
   .rail-list {
-    grid-template-columns: 1fr;
+    --rail-cols: 1;
+    --rail-gap: 12px;
+  }
+
+  .rail-item {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+  }
+
+  .rail-icon {
+    order: -1;
+    width: 52px;
+    height: 52px;
+    align-self: center;
+  }
+
+  .rail-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.98rem;
   }
 
   /* Tighten the FAB column on phones — 6 buttons at 56px spacing eats the
@@ -922,10 +1173,11 @@ body[data-page="policies"] .policy-dashboard {
   .hrms-admin-btn { bottom: 124px; }
   .manage-modules-btn { bottom: 172px; }
   .branding-btn { bottom: 220px; }
+  .reorder-btn { bottom: 268px; }
 
   .theme-panel {
     left: 16px;
-    bottom: 268px;
+    bottom: 316px;
   }
 
   /* Tooltip labels rarely make sense on touch; hide them on small screens. */
