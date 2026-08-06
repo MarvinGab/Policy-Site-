@@ -4059,7 +4059,10 @@ app.get("/api/hrms/launch", async (req, res) => {
   // Standalone sessions are untouched: this only runs in the launch handler.
   req.session.cookie.maxAge = HRMS_SESSION_MAX_AGE_MS;
 
-  return res.redirect(303, "/policies.html");
+  // Same landing split as the password and magic-link logins: admins get the
+  // admin console, everyone else the policy library. The employee page has no
+  // navigation into the console, so sending an admin there strands them.
+  return res.redirect(303, role === "admin" ? "/policy-admin.html" : "/policies.html");
 });
 
 const ensureOrgEmailTemplates = async (companyId) => {
