@@ -76,8 +76,11 @@ export const initAdmin = () => {
   let hrmsSettings = null;
 
   const isSectionAllowed = (section) => {
-    if (section !== "modules" && !isSuperAdmin) return false;
+    // Branding is org-scoped, not platform-scoped: the API behind it
+    // (PATCH /api/org/settings) already admits org admins, so the UI must
+    // too — this line has to stay ABOVE the super-admin gate below.
     if (section === "branding") return true;
+    if (section !== "modules" && !isSuperAdmin) return false;
     if (section === "people" || section === "communication" || section === "email") {
       return accessMode !== "hrms_link";
     }
@@ -137,8 +140,11 @@ export const initAdmin = () => {
         setValue("theme_id", branding.theme_id || "default");
         setValue("portal_name", branding.portal_name);
         setValue("login_background_color", branding.login_background_color);
-        populateBranding(branding);
       }
+      // Outside the settingsForm guard: org admins have no Settings section
+      // (it's super-admin markup, stripped by applyRoleAccess) but DO have
+      // the Branding tab, and its form must still be filled from storage.
+      populateBranding(data.branding || {});
       applyAccessMode();
       await renderOrgLoginUrl();
     } catch (error) {
