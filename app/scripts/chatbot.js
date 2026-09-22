@@ -172,14 +172,14 @@ const CHAT_STORAGE_PREFIX = "policy-chat-history-v5";
 let activeChatStorageKey = `${CHAT_STORAGE_PREFIX}:${window.location.hostname || "local"}`;
 
 /**
- * Ask Genie a question.
+ * Ask Zevo a question.
  *
  * The single call site for /api/chat, shared by the floating assistant and
  * the Direct Policy View workspace. Retrieval, prompting and answer
  * generation all live server-side and are untouched by either surface —
  * these two differ only in how the answer is presented.
  */
-export const askGenie = async ({ question, history = [] }) => {
+export const askZevo = async ({ question, history = [] }) => {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -208,7 +208,7 @@ export { cleanBotMessage, toApiHistory, saveChatHistory };
  * you?" seed. The workspace has a designed empty state; a greeting bubble
  * would mean it never gets shown.
  */
-export const loadGenieConversation = () => {
+export const loadZevoConversation = () => {
   const history = loadChatHistory();
   if (history.length === 1 && history[0]?.variant === "bot" && /^Hi! How can I help/.test(history[0].text)) {
     return [];
@@ -221,10 +221,10 @@ export const loadGenieConversation = () => {
  * history. Until this settles the key is hostname-based, which is already
  * org-scoped on subdomains; this pins it to the company id.
  */
-export const syncGenieStorage = async () => {
+export const syncZevoStorage = async () => {
   const key = await resolveChatStorageKey();
   if (key && key !== activeChatStorageKey) activeChatStorageKey = key;
-  return loadGenieConversation();
+  return loadZevoConversation();
 };
 
 const resolveChatStorageKey = async () => {

@@ -73,7 +73,7 @@ const classifyFailure = ({ item, response, retrievalPass, answerPass, finalConte
   return "";
 };
 
-const askGenie = async ({ item, baseUrl }) => {
+const askZevo = async ({ item, baseUrl }) => {
   const rawQuestion = Object.prototype.hasOwnProperty.call(item, "raw_question") ? item.raw_question : item.question;
   const response = await fetch(`${baseUrl}/api/chat?debug=rag`, {
     method: "POST",
@@ -170,11 +170,11 @@ const evaluatePayload = ({ item, payload }) => {
 };
 
 const runQuestion = async (item) => {
-  const rawPayload = await askGenie({ item, baseUrl: RAW_BASE_URL });
+  const rawPayload = await askZevo({ item, baseUrl: RAW_BASE_URL });
   const rawResult = evaluatePayload({ item, payload: rawPayload });
   let rewriteResult = null;
   if (REWRITE_BASE_URL) {
-    const rewritePayload = await askGenie({ item, baseUrl: REWRITE_BASE_URL });
+    const rewritePayload = await askZevo({ item, baseUrl: REWRITE_BASE_URL });
     rewriteResult = evaluatePayload({ item, payload: rewritePayload });
   }
   return {
@@ -268,7 +268,7 @@ if (!fs.existsSync(QUESTIONS_FILE)) {
   process.exit(1);
 }
 if (!COOKIE) {
-  console.error("Missing RAG_EVAL_COOKIE. Sign in, then pass the zarohr.sid cookie so the script uses the same authenticated Genie endpoint.");
+  console.error("Missing RAG_EVAL_COOKIE. Sign in, then pass the zarohr.sid cookie so the script uses the same authenticated Zevo endpoint.");
   process.exit(1);
 }
 

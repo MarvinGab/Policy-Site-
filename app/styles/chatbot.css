@@ -69,7 +69,7 @@
   color: var(--accent);
   font-weight: 700;
   position: relative;
-  animation: genie-float 4s ease-in-out infinite;
+  animation: zevo-float 4s ease-in-out infinite;
 }
 
 .chatbot-toggle-icon .bot-face {
@@ -85,7 +85,7 @@
   height: 8px;
 }
 
-@keyframes genie-float {
+@keyframes zevo-float {
   0%,
   100% {
     transform: translateY(-4px);
@@ -138,10 +138,10 @@
 }
 
 .chatbot.is-open .chatbot-toggle-icon {
-  animation: genie-to-chat 0.5s ease forwards;
+  animation: zevo-to-chat 0.5s ease forwards;
 }
 
-@keyframes genie-to-chat {
+@keyframes zevo-to-chat {
   0% {
     transform: translateY(0);
     opacity: 1;
@@ -306,7 +306,7 @@
 }
 
 .chatbot.is-open .chatbot-message-row.bot .chatbot-avatar {
-  animation: genie-jump 0.5s ease;
+  animation: zevo-jump 0.5s ease;
 }
 
 .chatbot-message-row.user {
@@ -437,7 +437,7 @@
   }
 }
 
-@keyframes genie-jump {
+@keyframes zevo-jump {
   0% {
     transform: translateY(16px) scale(0.92);
     opacity: 0.3;

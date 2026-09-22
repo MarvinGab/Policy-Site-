@@ -23,7 +23,7 @@ create table if not exists companies (
   -- How the employee-facing policy page presents itself. Independent of
   -- access_mode, which governs *how people sign in*; this governs what they
   -- see once they are in. 'module' is the module-card dashboard, 'direct' is
-  -- the flat policy library with the Genie workspace beneath it. Existing
+  -- the flat policy library with the Zevo workspace beneath it. Existing
   -- organizations keep the module view they already know.
   policy_display_mode text not null default 'module'
     check (policy_display_mode in ('module', 'direct')),

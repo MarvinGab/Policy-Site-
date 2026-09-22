@@ -3,7 +3,7 @@
 // If no org param is given (e.g. someone hits /policies.html directly), bounces to /orgs.html.
 //
 // Two presentations share this payload — module cards, or the Direct Policy +
-// Genie view — selected by the org's policy_display_mode.
+// Zevo view — selected by the org's policy_display_mode.
 
 import { buildDirectView, initDirectView } from "./direct-view.js";
 
@@ -86,7 +86,7 @@ export const initPolicyRender = () => {
 
   // Do not pre-paint cached policy data. The org can switch between module
   // and direct display modes, and painting stale cache is exactly how the old
-  // floating Genie flashes before the fresh config arrives.
+  // floating Zevo flashes before the fresh config arrives.
   container.innerHTML = railState({
     tone: "loading",
     title: "Loading policies",

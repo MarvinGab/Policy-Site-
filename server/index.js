@@ -2752,7 +2752,7 @@ const getOrgPolicySearchStatus = async (companyId) => {
 const buildClosestPolicyFallback = async ({ companyId, question, modules }) => {
   const searchStatus = await getOrgPolicySearchStatus(companyId);
   if (searchStatus === "no_uploaded_documents") {
-    return "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Genie.";
+    return "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Zevo.";
   }
   if (searchStatus === "no_indexed_chunks") {
     return "Uploaded policy documents are not searchable yet. Re-upload them or check indexing.";
@@ -4897,9 +4897,9 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     const policySearchStatus = await getOrgPolicySearchStatus(req.orgCompanyId);
     if (policySearchStatus === "no_uploaded_documents") {
       ragDebug.mode = "no_uploaded_documents";
-      ragDebug.final_answer = "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Genie.";
+      ragDebug.final_answer = "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Zevo.";
       return res.json(withRagDebug(req, {
-        answer: "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Genie.",
+        answer: "No uploaded policy documents are available for this org yet. Upload policy documents before using Ask Zevo.",
         sources: [],
         mode: "no_uploaded_documents",
       }, ragDebug));
@@ -4944,7 +4944,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
       if (orgAlready >= CHAT_DAILY_CAP_PER_ORG) {
         return res.status(429).json({
           error: "org_daily_limit_reached",
-          message: "This organization's Ask Genie limit has been reached for today. Please try again tomorrow.",
+          message: "This organization's Ask Zevo limit has been reached for today. Please try again tomorrow.",
           remaining: 0,
         });
       }
@@ -5103,7 +5103,7 @@ app.post("/api/chat", chatLimiter, requireOrgAccess, async (req, res) => {
     }
 
     const systemPrompt =
-      "You are Ask Genie, an HR policy assistant for employees.\n\n" +
+      "You are Ask Zevo, an HR policy assistant for employees.\n\n" +
       "STYLE:\n" +
       "- Answer the question directly and completely, then stop. No preamble.\n" +
       "- Be concise — usually 1-3 sentences. For questions that call for a list (e.g. holidays, leave types, steps), give a short bulleted or numbered list.\n" +

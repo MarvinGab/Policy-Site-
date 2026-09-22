@@ -71,7 +71,6 @@ export const initAdmin = () => {
   let emailTemplates = [];
   let activeTemplateId = null;
   let accessMode = "standalone";
-  let policyDisplayMode = "module";
   let orgLoginUrl = "";
   let hrmsSettings = null;
 
@@ -127,14 +126,9 @@ export const initAdmin = () => {
       const data = await apiJson("/api/org/settings");
       accessMode = data.access_mode || "standalone";
       orgLoginUrl = data.login_url || "";
-      policyDisplayMode = data.policy_display_mode || "module";
       if (settingsForm) {
         const radio = settingsForm.querySelector(`input[name="access_mode"][value="${accessMode}"]`);
         if (radio) radio.checked = true;
-        const displayRadio = settingsForm.querySelector(
-          `input[name="policy_display_mode"][value="${policyDisplayMode}"]`
-        );
-        if (displayRadio) displayRadio.checked = true;
         const branding = data.branding || {};
         const setValue = (name, value) => { const input = settingsForm.elements[name]; if (input && value) input.value = value; };
         setValue("theme_id", branding.theme_id || "default");
@@ -144,7 +138,7 @@ export const initAdmin = () => {
       // Outside the settingsForm guard: org admins have no Settings section
       // (it's super-admin markup, stripped by applyRoleAccess) but DO have
       // the Branding tab, and its form must still be filled from storage.
-      populateBranding(data.branding || {});
+      populateBranding(brandingFromSettings(data));
       applyAccessMode();
       await renderOrgLoginUrl();
     } catch (error) {
@@ -288,8 +282,15 @@ export const initAdmin = () => {
   // re-picking one), so save knows when to send "" to clear it server-side.
   const brandingState = { logoCleared: false, bgCleared: false };
   let savedBrandingSnapshot = null;
+  // Policy display lives on the Branding tab but comes back from the API as a
+  // top-level settings field, so fold it into the branding object here.
+  const brandingFromSettings = (data = {}) => ({
+    ...(data.branding || {}),
+    policy_display_mode: data.policy_display_mode,
+  });
   const normalizeBranding = (branding = {}) => ({
     theme_id: branding.theme_id || "default",
+    policy_display_mode: branding.policy_display_mode === "direct" ? "direct" : "module",
     portal_name: (branding.portal_name || "").trim(),
     login_background_color: branding.login_background_color || "",
     login_background_image_url: branding.login_background_image_url || "",
@@ -302,6 +303,7 @@ export const initAdmin = () => {
     const logoFile = brandingForm.elements.logo_file?.files?.[0];
     return {
       theme_id: brandingForm.elements.theme_id?.value || "default",
+      policy_display_mode: brandingForm.querySelector('input[name="policy_display_mode"]:checked')?.value || "module",
       portal_name: (brandingForm.elements.portal_name?.value || "").trim(),
       login_background_color: mode === "color" ? (brandingForm.elements.login_background_color?.value || "").trim() : "",
       login_background_image_url: mode === "image"
@@ -384,6 +386,9 @@ export const initAdmin = () => {
   const populateBranding = (branding = {}) => {
     if (!brandingForm) return;
     setThemeSwatch(branding.theme_id || "default");
+    const displayMode = branding.policy_display_mode === "direct" ? "direct" : "module";
+    const displayRadio = brandingForm.querySelector(`input[name="policy_display_mode"][value="${displayMode}"]`);
+    if (displayRadio) displayRadio.checked = true;
     if (brandingForm.elements.portal_name) brandingForm.elements.portal_name.value = branding.portal_name || "";
     const color = branding.login_background_color || "";
     const bgImage = branding.login_background_image_url || "";
@@ -414,7 +419,7 @@ export const initAdmin = () => {
   brandingForm?.querySelector("[data-discard-branding]")?.addEventListener("click", async () => {
     try {
       const data = await apiJson("/api/org/settings");
-      populateBranding(data.branding || {});
+      populateBranding(brandingFromSettings(data));
       showBrandingSaved();
     } catch (error) {
       showToast(error.message || "Could not discard changes.", "error");
@@ -474,15 +479,12 @@ export const initAdmin = () => {
     const selected = settingsForm.querySelector('input[name="access_mode"]:checked')?.value;
     if (!selected) return;
     try {
-      const selectedDisplay =
-        settingsForm.querySelector('input[name="policy_display_mode"]:checked')?.value || policyDisplayMode;
-      const payload = { access_mode: selected, policy_display_mode: selectedDisplay };
+      const payload = { access_mode: selected };
       const data = await apiJson("/api/org/settings", {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
       accessMode = data.access_mode || selected;
-      policyDisplayMode = data.policy_display_mode || selectedDisplay;
       applyAccessMode();
       if (accessMode === "standalone") {
         await loadPeople();
@@ -507,6 +509,7 @@ export const initAdmin = () => {
       const payload = {
         access_mode: accessMode || "standalone",
         theme_id: brandingForm.elements.theme_id.value || "default",
+        policy_display_mode: brandingForm.querySelector('input[name="policy_display_mode"]:checked')?.value || "module",
         portal_name: brandingForm.elements.portal_name.value.trim(),
       };
 
@@ -535,7 +538,7 @@ export const initAdmin = () => {
       const data = await apiJson("/api/org/settings", { method: "PATCH", body: JSON.stringify(payload) });
       // populateBranding resets the dirty snapshot, which hides both buttons —
       // so the confirmation has to be raised after it, not before.
-      populateBranding(data.branding || (await apiJson("/api/org/settings")).branding || {});
+      populateBranding(brandingFromSettings(data.branding ? data : await apiJson("/api/org/settings")));
       showBrandingSaved();
       // Reflect the theme immediately and refresh the per-host cache so it's
       // enforced on the next load without a stale flash.

@@ -1,25 +1,25 @@
-// Direct Policy + Genie view — the presentation an organization gets when
+// Direct Policy + Zevo view — the presentation an organization gets when
 // policy_display_mode = "direct".
 //
 // Three states, one attribute (data-state on .direct-view):
 //
 //   browsing  full policy library + composer. Conversation is NOT rendered,
 //             even when history exists. Always the state on page load.
-//   genie     library compresses to a shallow full-width shelf; the
+//   zevo     library compresses to a shallow full-width shelf; the
 //             conversation becomes an internally-scrolling region so the
 //             document height stops growing.
 //   history   same workspace, older turns revealed on demand.
 //
-// Nothing here touches retrieval or answer generation — askGenie() is the
+// Nothing here touches retrieval or answer generation — askZevo() is the
 // same /api/chat call the floating assistant makes.
 
 import { previewLatestDocument } from "./modules.js";
 import {
-  askGenie,
+  askZevo,
   cleanBotMessage,
-  loadGenieConversation,
+  loadZevoConversation,
   saveChatHistory,
-  syncGenieStorage,
+  syncZevoStorage,
   toApiHistory,
 } from "./chatbot.js";
 
@@ -46,9 +46,9 @@ const DOC_ICON = `
 
 // The same animated character the Module View's floating toggle uses —
 // .bot-face + .bot-hand from chatbot.css, so the waving hand and the float
-// come along with it. Reused rather than re-drawn so Genie is one identity
+// come along with it. Reused rather than re-drawn so Zevo is one identity
 // across both display modes; only the scale differs here.
-const GENIE_MARK = `<span class="genie-mark" aria-hidden="true"><span class="bot-face"></span><span class="bot-hand"></span></span>`;
+const ZEVO_MARK = `<span class="zevo-mark" aria-hidden="true"><span class="bot-face"></span><span class="bot-hand"></span></span>`;
 
 export const flattenPolicies = (modules = []) => {
   const seen = new Set();
@@ -105,21 +105,21 @@ export const buildDirectView = (data = {}) => {
         <div class="shelf__body">${list}</div>
       </section>
 
-      <section class="genie" data-genie>
-        <div class="genie__scroll" data-genie-scroll>
-          <button class="genie__earlier" type="button" data-history-toggle hidden>
+      <section class="zevo" data-zevo>
+        <div class="zevo__scroll" data-zevo-scroll>
+          <button class="zevo__earlier" type="button" data-history-toggle hidden>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
             <span data-history-label>Earlier conversation</span>
-            <span class="genie__earlier-count" data-history-count></span>
+            <span class="zevo__earlier-count" data-history-count></span>
           </button>
-          <div class="genie__turns" data-genie-thread role="log" aria-live="polite"></div>
+          <div class="zevo__turns" data-zevo-thread role="log" aria-live="polite"></div>
         </div>
 
-        <form class="composer" data-genie-form>
-          <label class="sr-only" for="genie-input">Ask about your company policies</label>
-          ${GENIE_MARK}
+        <form class="composer" data-zevo-form>
+          <label class="sr-only" for="zevo-input">Ask about your company policies</label>
+          ${ZEVO_MARK}
           <span class="chatbot-info chatbot-info--up" data-chatbot-info>
-            <button class="chatbot-info-btn" type="button" aria-label="About Ask Genie" aria-expanded="false">
+            <button class="chatbot-info-btn" type="button" aria-label="About Ask Zevo" aria-expanded="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><line x1="12" y1="7.6" x2="12" y2="7.6"/>
               </svg>
@@ -129,11 +129,11 @@ export const buildDirectView = (data = {}) => {
                 <button type="button" class="chatbot-info-lang is-active" data-lang="en">EN</button>
                 <button type="button" class="chatbot-info-lang" data-lang="hi">हिं</button>
               </span>
-              <span class="chatbot-info-text" data-info-lang="en">Ask Genie answers only from your organization's uploaded policy documents — those documents are the official source of truth. It can misread or miss details, so always confirm anything important against the actual policy or with HR before acting on it. Its answers are for guidance only and are not binding.</span>
-              <span class="chatbot-info-text" data-info-lang="hi" lang="hi" hidden>Ask Genie केवल आपकी कंपनी के अपलोड किए गए पॉलिसी दस्तावेज़ों से ही उत्तर देता है — वही दस्तावेज़ आधिकारिक और सही स्रोत हैं। यह कभी-कभी गलत समझ सकता है या कोई जानकारी छूट सकती है, इसलिए किसी भी ज़रूरी बात पर अमल करने से पहले उसे असली पॉलिसी में या HR से अवश्य जाँच लें। इसके उत्तर केवल मार्गदर्शन के लिए हैं, बाध्यकारी नहीं।</span>
+              <span class="chatbot-info-text" data-info-lang="en">Ask Zevo answers only from your organization's uploaded policy documents — those documents are the official source of truth. It can misread or miss details, so always confirm anything important against the actual policy or with HR before acting on it. Its answers are for guidance only and are not binding.</span>
+              <span class="chatbot-info-text" data-info-lang="hi" lang="hi" hidden>Ask Zevo केवल आपकी कंपनी के अपलोड किए गए पॉलिसी दस्तावेज़ों से ही उत्तर देता है — वही दस्तावेज़ आधिकारिक और सही स्रोत हैं। यह कभी-कभी गलत समझ सकता है या कोई जानकारी छूट सकती है, इसलिए किसी भी ज़रूरी बात पर अमल करने से पहले उसे असली पॉलिसी में या HR से अवश्य जाँच लें। इसके उत्तर केवल मार्गदर्शन के लिए हैं, बाध्यकारी नहीं।</span>
             </span>
           </span>
-          <textarea class="composer__input" id="genie-input" data-genie-input rows="1"
+          <textarea class="composer__input" id="zevo-input" data-zevo-input rows="1"
             placeholder="Ask about leave, holidays, POSH..." required></textarea>
           <button class="composer__send" type="submit" aria-label="Send">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
@@ -165,7 +165,7 @@ const formatAnswer = (text = "") => {
 const turnMarkup = ({ question, answer }, { pending = false } = {}) => `
   <article class="turn${pending ? " is-pending" : ""}">
     <div class="turn__bubble turn__bubble--user">${escapeHtml(question)}</div>
-    <div class="turn__bubble turn__bubble--genie" data-genie-body>${formatAnswer(answer)}</div>
+    <div class="turn__bubble turn__bubble--zevo" data-zevo-body>${formatAnswer(answer)}</div>
   </article>`;
 
 const toExchanges = (history = []) => {
@@ -182,19 +182,19 @@ export const initDirectView = (container) => {
   const root = container.querySelector("[data-direct]");
   if (!root) return;
 
-  const genie = root.querySelector("[data-genie]");
-  const scroll = root.querySelector("[data-genie-scroll]");
-  const thread = root.querySelector("[data-genie-thread]");
+  const zevo = root.querySelector("[data-zevo]");
+  const scroll = root.querySelector("[data-zevo-scroll]");
+  const thread = root.querySelector("[data-zevo-thread]");
   const earlier = root.querySelector("[data-history-toggle]");
   const earlierCount = root.querySelector("[data-history-count]");
   const earlierLabel = root.querySelector("[data-history-label]");
   const shelfToggle = root.querySelector("[data-shelf-toggle]");
   const shelfLabel = root.querySelector("[data-shelf-label]");
-  const form = root.querySelector("[data-genie-form]");
-  const input = root.querySelector("[data-genie-input]");
+  const form = root.querySelector("[data-zevo-form]");
+  const input = root.querySelector("[data-zevo-input]");
   const send = root.querySelector(".composer__send");
 
-  let history = loadGenieConversation();
+  let history = loadZevoConversation();
   let state = "browsing";
   let visibleTurns = ALWAYS_SHOW_UP_TO;
   let retuning = false;
@@ -230,7 +230,7 @@ export const initDirectView = (container) => {
     // Mirrored onto body so the dashboard's own bottom padding can stand
     // down while the workspace owns the viewport — otherwise that padding
     // is added below a full-height workspace and the page scrolls.
-    document.body.dataset.genieState = next;
+    document.body.dataset.zevoState = next;
     if (shelfLabel) shelfLabel.textContent = next === "browsing" ? "View all" : "Expand";
     render();
     requestAnimationFrame(retune);
@@ -240,7 +240,7 @@ export const initDirectView = (container) => {
     const turns = toExchanges(history);
 
     // Browsing renders no conversation at all. History still lives in
-    // storage; it simply isn't the page's subject until Genie is engaged.
+    // storage; it simply isn't the page's subject until Zevo is engaged.
     if (state === "browsing") {
       thread.innerHTML = "";
       earlier.hidden = true;
@@ -281,7 +281,7 @@ export const initDirectView = (container) => {
   render();
   requestAnimationFrame(flagOverflowingPolicyNames);
 
-  syncGenieStorage().then((synced) => {
+  syncZevoStorage().then((synced) => {
     if (!synced.length && !history.length) return;
     history = synced;
     render();
@@ -289,23 +289,23 @@ export const initDirectView = (container) => {
 
   // ── State transitions ───────────────────────────────────────────────────
 
-  input?.addEventListener("focus", () => setState("genie"));
+  input?.addEventListener("focus", () => setState("zevo"));
 
   // "View all" is an explicit request to browse — and the deliberate way out
   // of the workspace, for people who don't discover click-outside.
   shelfToggle?.addEventListener("click", () => setState("browsing"));
 
-  earlier?.addEventListener("click", () => setState(state === "history" ? "genie" : "history"));
+  earlier?.addEventListener("click", () => setState(state === "history" ? "zevo" : "history"));
 
   /**
    * Symmetrical exit. Focus alone is the wrong signal — clicking an answer or
-   * the history control blurs the textarea but is still working with Genie.
-   * Only real chat controls/content are protected; blank gutters in the Genie
+   * the history control blurs the textarea but is still working with Zevo.
+   * Only real chat controls/content are protected; blank gutters in the Zevo
    * section should behave like outside clicks and reopen the policies.
    */
   document.addEventListener("pointerdown", (event) => {
     if (state === "browsing") return;
-    if (event.target.closest("[data-genie-form], [data-genie-thread], [data-history-toggle]")) return;
+    if (event.target.closest("[data-zevo-form], [data-zevo-thread], [data-history-toggle]")) return;
     if (event.target.closest(".viewer-backdrop")) return;
     setState("browsing");
   });
@@ -334,7 +334,7 @@ export const initDirectView = (container) => {
     if (!question) return;
 
     // Submitting always keeps the workspace open.
-    setState("genie");
+    setState("zevo");
     input.value = "";
     autoGrow();
     input.disabled = true;
@@ -347,11 +347,11 @@ export const initDirectView = (container) => {
 
     const turn = thread.lastElementChild;
     turn?.classList.add("is-pending");
-    if (turn) turn.querySelector("[data-genie-body]").innerHTML = "<p>Thinking…</p>";
+    if (turn) turn.querySelector("[data-zevo-body]").innerHTML = "<p>Thinking…</p>";
 
     const requestHistory = toApiHistory(history).slice(-6);
     try {
-      history.push({ text: await askGenie({ question, history: requestHistory }), variant: "bot" });
+      history.push({ text: await askZevo({ question, history: requestHistory }), variant: "bot" });
     } catch (error) {
       history.push({ text: cleanBotMessage(error?.message || "Unable to answer right now."), variant: "bot" });
     } finally {

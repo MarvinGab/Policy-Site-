@@ -4,7 +4,7 @@ Organization resolved from slug `trio-infra`: `8dde7580-2fed-4040-9d7d-c9e9fd83c
 
 ## Evaluation Philosophy
 
-Real employees will ask Genie lazily. The raw user question is the test input and must be sent exactly as written, including casing, spelling mistakes, abbreviations, incomplete phrasing, Indian workplace wording, and vague follow-ups. Query rewriting may later normalize intent, but the golden dataset must preserve raw phrasing so the system is measured on employee understanding rather than polished prompt writing.
+Real employees will ask Zevo lazily. The raw user question is the test input and must be sent exactly as written, including casing, spelling mistakes, abbreviations, incomplete phrasing, Indian workplace wording, and vague follow-ups. Query rewriting may later normalize intent, but the golden dataset must preserve raw phrasing so the system is measured on employee understanding rather than polished prompt writing.
 
 Metrics should be read separately: raw-query retrieval success, rewritten-query retrieval success when a rewrite-enabled server is supplied to the harness, and final answer correctness.
 
