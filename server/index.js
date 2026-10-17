@@ -1851,6 +1851,15 @@ const requireStandaloneEmployeeAccess = async (req, res, next) => {
   return next();
 };
 
+// True when the session may manage (and therefore download) this org's
+// policy files. Call after requireOrgAccess has set req.orgCompanyId.
+const canManageOrg = (req) => {
+  const user = req.session?.user;
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+  return user.role === "admin" && user.companyId === req.orgCompanyId;
+};
+
 const requireOrgAccess = (req, res, next) => {
   if (!req.session?.user) return res.status(401).send("Not authenticated.");
   const companyId = resolveRequestCompanyId(req);
@@ -4688,7 +4697,7 @@ app.get("/api/policy-documents", requireOrgAccess, async (req, res) => {
 
   const { data, error } = await supabase
     .from("policy_documents")
-    .select("file_path")
+    .select("id, file_path")
     .eq("policy_id", policyId)
     .eq("company_id", req.orgCompanyId);
 
@@ -4698,6 +4707,20 @@ app.get("/api/policy-documents", requireOrgAccess, async (req, res) => {
   }
 
   const files = data || [];
+
+  // Employees are view-only: they never receive a storage URL or path, only
+  // a document id the protected viewer endpoints below render page by page.
+  if (!canManageOrg(req)) {
+    return res.json(
+      files.map((file) => ({
+        id: file.id,
+        name: file.file_path ? file.file_path.split("/").pop() : "Document",
+        url: null,
+        protected: true,
+      }))
+    );
+  }
+
   const signedFiles = await Promise.all(
     files.map(async (file) => {
       if (!file.file_path) return { ...file, url: null };
@@ -4713,6 +4736,121 @@ app.get("/api/policy-documents", requireOrgAccess, async (req, res) => {
   );
 
   return res.json(signedFiles);
+});
+
+// --- Protected (view-only) policy viewer ---
+// Employees must not be able to download policy files. The original file
+// never leaves the server for them: PDFs are rasterised page by page into
+// PNGs, DOCX is converted to HTML, TXT is sent as text. The file buffer is
+// cached briefly so scrolling through pages doesn't re-download from storage.
+
+const PROTECTED_FILE_CACHE_TTL_MS = 5 * 60 * 1000;
+const PROTECTED_FILE_CACHE_MAX = 25;
+const protectedFileCache = new Map(); // file_path → { buffer, pages, expires }
+
+const loadProtectedDocument = async (req, documentId) => {
+  const { data: doc, error } = await supabase
+    .from("policy_documents")
+    .select("id, file_path")
+    .eq("id", documentId)
+    .eq("company_id", req.orgCompanyId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!doc?.file_path) return null;
+
+  const cached = protectedFileCache.get(doc.file_path);
+  if (cached && cached.expires > Date.now()) return { doc, entry: cached };
+
+  const { data: blob, error: downloadError } = await supabase.storage
+    .from("policy-files")
+    .download(doc.file_path);
+  if (downloadError) throw downloadError;
+
+  const entry = {
+    buffer: Buffer.from(await blob.arrayBuffer()),
+    pages: null,
+    expires: Date.now() + PROTECTED_FILE_CACHE_TTL_MS,
+  };
+  protectedFileCache.delete(doc.file_path);
+  protectedFileCache.set(doc.file_path, entry);
+  while (protectedFileCache.size > PROTECTED_FILE_CACHE_MAX) {
+    protectedFileCache.delete(protectedFileCache.keys().next().value);
+  }
+  return { doc, entry };
+};
+
+const setProtectedHeaders = (res) => {
+  res.setHeader("Cache-Control", "private, no-store, max-age=0");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", "inline");
+};
+
+app.get("/api/policy-documents/:documentId/view", requireOrgAccess, async (req, res) => {
+  try {
+    const loaded = await loadProtectedDocument(req, req.params.documentId);
+    if (!loaded) return res.status(404).send("Document not found.");
+    const { doc, entry } = loaded;
+    const mime = inferMimeFromPath(doc.file_path);
+    setProtectedHeaders(res);
+
+    if (mime === "application/pdf") {
+      if (!entry.pages) {
+        const { PDFParse } = await import("pdf-parse");
+        const parser = new PDFParse({ data: new Uint8Array(entry.buffer) });
+        try {
+          entry.pages = (await parser.getInfo()).total;
+        } finally {
+          await parser.destroy();
+        }
+      }
+      return res.json({ type: "pdf", pages: entry.pages });
+    }
+
+    if (mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      const { default: mammoth } = await import("mammoth");
+      const result = await mammoth.convertToHtml({ buffer: entry.buffer });
+      // Drop links so nothing in the document can navigate or point anywhere.
+      const html = String(result.value || "").replace(/\s(href|target)="[^"]*"/gi, "");
+      return res.json({ type: "html", html });
+    }
+
+    if (mime === "text/plain") {
+      return res.json({ type: "text", text: entry.buffer.toString("utf-8") });
+    }
+
+    return res.status(415).send("Preview not available for this file type.");
+  } catch (error) {
+    console.error("Protected document view failed:", error);
+    return res.status(500).send("Unable to open document.");
+  }
+});
+
+app.get("/api/policy-documents/:documentId/pages/:page", requireOrgAccess, async (req, res) => {
+  const page = Number.parseInt(req.params.page, 10);
+  if (!Number.isInteger(page) || page < 1) return res.status(400).send("Invalid page.");
+  try {
+    const loaded = await loadProtectedDocument(req, req.params.documentId);
+    if (!loaded) return res.status(404).send("Document not found.");
+    if (inferMimeFromPath(loaded.doc.file_path) !== "application/pdf") {
+      return res.status(415).send("Not a PDF document.");
+    }
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: new Uint8Array(loaded.entry.buffer) });
+    let shot;
+    try {
+      shot = await parser.getScreenshot({ partial: [page], desiredWidth: 1400, imageBuffer: true, imageDataUrl: false });
+    } finally {
+      await parser.destroy();
+    }
+    const image = shot?.pages?.[0]?.data;
+    if (!image) return res.status(404).send("Page not found.");
+    setProtectedHeaders(res);
+    res.setHeader("Content-Type", "image/png");
+    return res.send(Buffer.from(image));
+  } catch (error) {
+    console.error("Protected page render failed:", error);
+    return res.status(500).send("Unable to render page.");
+  }
 });
 
 app.post("/api/policy-documents/delete", requireOrgManager, async (req, res) => {

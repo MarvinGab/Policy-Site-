@@ -175,7 +175,8 @@ export const initModules = () => {
       .then((files) => {
         const latest = files?.[0];
         prefetchedDocs.set(policyId, latest || null);
-        if (latest?.url) prefetchFileBlob(latest.url);
+        if (latest?.protected) prefetchProtectedView(latest.id);
+        else if (latest?.url) prefetchFileBlob(latest.url);
       })
       .catch(() => prefetchedDocs.delete(policyId));
   });
@@ -776,8 +777,9 @@ export const previewLatestDocument = async ({ policyId, item }) => {
     if (!latest) { showToast("No files uploaded for this policy.", "info"); return; }
     // Skip the outer catch/try for the original files variable
     const files = [latest];
-    const name = latest.file_path ? latest.file_path.split("/").pop() : "Document preview";
-    openDocumentViewer({ url: latest.url, name });
+    const name = latest.name || (latest.file_path ? latest.file_path.split("/").pop() : "Document preview");
+    if (latest.protected) await openProtectedViewer({ documentId: latest.id, name });
+    else openDocumentViewer({ url: latest.url, name });
   } catch (error) {
     console.error("Preview failed:", error);
     showToast("Unable to open document preview.", "error");
@@ -803,16 +805,16 @@ const openDocumentViewer = ({ url, name }) => {
   }
 
   const modal = ensureViewerModal();
+  resetViewerModal(modal);
   const frame = modal.querySelector(".viewer-frame");
   const title = modal.querySelector(".viewer-title");
   const fallback = modal.querySelector(".viewer-fallback");
   const download = modal.querySelector("[data-viewer-download]");
 
   title.textContent = name || "Document preview";
-  fallback.textContent = "";
-  frame.style.opacity = "1";
   frame.src = viewerUrl;
   if (download) {
+    download.hidden = false;
     download.href = url;
     download.setAttribute("download", name || "document");
   }
@@ -822,6 +824,182 @@ const openDocumentViewer = ({ url, name }) => {
     fallback.textContent = "Preview not available for this file type.";
   }
 };
+
+// --- View-only viewer (employees) ---
+// The server never sends employees the file itself: PDF pages arrive as
+// rendered images, DOCX as HTML, TXT as text. On top of that the viewer has
+// no download button, blocks right-click / drag / save / print shortcuts,
+// blanks the page when printed, and watermarks every view with the viewer's
+// name and email so screenshots stay traceable.
+
+const protectedViewCache = new Map(); // documentId → Promise<meta>
+
+const fetchProtectedView = (documentId) => {
+  if (!protectedViewCache.has(documentId)) {
+    const request = apiJson(`/api/policy-documents/${encodeURIComponent(documentId)}/view`);
+    request.catch(() => protectedViewCache.delete(documentId));
+    protectedViewCache.set(documentId, request);
+  }
+  return protectedViewCache.get(documentId);
+};
+
+const prefetchProtectedView = (documentId) => {
+  if (documentId) fetchProtectedView(documentId).catch(() => {});
+};
+
+let watermarkTextPromise = null;
+const getWatermarkText = () => {
+  if (!watermarkTextPromise) {
+    watermarkTextPromise = apiJson("/api/session")
+      .then((session) => {
+        const who = [session?.name, session?.email].filter(Boolean);
+        const unique = who.filter((value, index) => who.indexOf(value) === index);
+        return [...unique, new Date().toLocaleDateString()].join(" · ");
+      })
+      .catch(() => "Confidential");
+  }
+  return watermarkTextPromise;
+};
+
+const buildWatermark = (text) => {
+  const layer = document.createElement("div");
+  layer.className = "viewer-watermark";
+  layer.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 40; i += 1) {
+    const span = document.createElement("span");
+    span.textContent = text;
+    layer.appendChild(span);
+  }
+  return layer;
+};
+
+const openProtectedViewer = async ({ documentId, name }) => {
+  if (!documentId) {
+    showToast("Preview not available for this file.", "error");
+    return;
+  }
+  const modal = ensureViewerModal();
+  resetViewerModal(modal);
+  const token = protectedViewToken;
+  const title = modal.querySelector(".viewer-title");
+  const fallback = modal.querySelector(".viewer-fallback");
+  const pages = modal.querySelector(".viewer-pages");
+  const frame = modal.querySelector(".viewer-frame");
+  const download = modal.querySelector("[data-viewer-download]");
+
+  title.textContent = name || "Document preview";
+  frame.hidden = true;
+  if (download) download.hidden = true;
+  pages.hidden = false;
+  fallback.textContent = "Loading document…";
+  modal.classList.add("is-visible", "is-protected");
+  document.body.classList.add("is-viewing-protected");
+
+  let meta;
+  try {
+    meta = await fetchProtectedView(documentId);
+  } catch (error) {
+    if (token !== protectedViewToken) return;
+    fallback.textContent = /not available/i.test(error.message || "")
+      ? "Preview not available for this file type."
+      : "Unable to open document.";
+    return;
+  }
+  // The user may have closed or switched documents while we waited.
+  if (token !== protectedViewToken) return;
+
+  const content = document.createElement("div");
+  content.className = "viewer-pages-content";
+
+  if (meta.type === "pdf") {
+    for (let page = 1; page <= meta.pages; page += 1) {
+      const img = document.createElement("img");
+      img.className = "viewer-page";
+      img.alt = `Page ${page} of ${meta.pages}`;
+      img.loading = page <= 2 ? "eager" : "lazy";
+      img.decoding = "async";
+      img.draggable = false;
+      img.src = `/api/policy-documents/${encodeURIComponent(documentId)}/pages/${page}`;
+      img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
+      content.appendChild(img);
+    }
+  } else if (meta.type === "html") {
+    const doc = document.createElement("article");
+    doc.className = "viewer-doc";
+    doc.appendChild(sanitizeDocHtml(meta.html || ""));
+    content.appendChild(doc);
+  } else if (meta.type === "text") {
+    const doc = document.createElement("pre");
+    doc.className = "viewer-doc viewer-doc--text";
+    doc.textContent = meta.text || "";
+    content.appendChild(doc);
+  } else {
+    fallback.textContent = "Preview not available for this file type.";
+    return;
+  }
+
+  const watermark = buildWatermark(await getWatermarkText());
+  if (token !== protectedViewToken) return;
+  fallback.textContent = "";
+  pages.replaceChildren(content, watermark);
+};
+
+// Mammoth output is already escaped, but the source is an uploaded file, so
+// rebuild it through an allowlist: known formatting tags only, no attributes
+// except table spans and inline (data:) images.
+const DOC_ALLOWED_TAGS = new Set([
+  "P", "H1", "H2", "H3", "H4", "H5", "H6", "STRONG", "B", "EM", "I", "U", "S", "SUB", "SUP",
+  "UL", "OL", "LI", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "BR", "BLOCKQUOTE", "A", "IMG",
+]);
+
+const sanitizeDocHtml = (html) => {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const copy = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent);
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+    if (!DOC_ALLOWED_TAGS.has(node.tagName)) {
+      const fragment = document.createDocumentFragment();
+      node.childNodes.forEach((child) => { const c = copy(child); if (c) fragment.appendChild(c); });
+      return fragment;
+    }
+    const el = document.createElement(node.tagName === "A" ? "span" : node.tagName);
+    if (node.tagName === "IMG") {
+      const src = node.getAttribute("src") || "";
+      if (!/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(src)) return null;
+      el.src = src;
+      el.alt = node.getAttribute("alt") || "";
+      el.draggable = false;
+    }
+    ["colspan", "rowspan"].forEach((attr) => {
+      if (node.hasAttribute(attr)) el.setAttribute(attr, String(Number.parseInt(node.getAttribute(attr), 10) || 1));
+    });
+    node.childNodes.forEach((child) => { const c = copy(child); if (c) el.appendChild(c); });
+    return el;
+  };
+  const fragment = document.createDocumentFragment();
+  parsed.body.childNodes.forEach((child) => { const c = copy(child); if (c) fragment.appendChild(c); });
+  return fragment;
+};
+
+let protectedViewToken = 0;
+
+const resetViewerModal = (modal) => {
+  protectedViewToken += 1;
+  const frame = modal.querySelector(".viewer-frame");
+  const pages = modal.querySelector(".viewer-pages");
+  frame.src = "";
+  frame.hidden = false;
+  frame.style.opacity = "1";
+  pages.hidden = true;
+  pages.replaceChildren();
+  delete pages.dataset.documentId;
+  modal.querySelector(".viewer-fallback").textContent = "";
+  modal.classList.remove("is-protected");
+  document.body.classList.remove("is-viewing-protected");
+};
+
+const isProtectedViewOpen = (modal) =>
+  modal.classList.contains("is-visible") && modal.classList.contains("is-protected");
 
 const ensureViewerModal = () => {
   let modal = document.querySelector(".viewer-backdrop");
@@ -840,6 +1018,7 @@ const ensureViewerModal = () => {
       </div>
       <div class="viewer-body">
         <iframe title="Document preview" class="viewer-frame"></iframe>
+        <div class="viewer-pages" hidden></div>
         <div class="viewer-fallback"></div>
       </div>
     </div>
@@ -847,9 +1026,7 @@ const ensureViewerModal = () => {
   document.body.appendChild(modal);
 
   const close = () => {
-    const frame = modal.querySelector(".viewer-frame");
-    frame.src = "";
-    frame.style.opacity = "1";
+    resetViewerModal(modal);
     modal.classList.remove("is-visible");
   };
 
@@ -858,11 +1035,28 @@ const ensureViewerModal = () => {
     if (event.target.closest("[data-viewer-close]")) close();
   });
 
+  // View-only mode: no context menu ("Save image as…"), no dragging pages
+  // out, no copying text.
+  ["contextmenu", "dragstart", "copy", "cut"].forEach((type) => {
+    modal.addEventListener(type, (event) => {
+      if (isProtectedViewOpen(modal)) event.preventDefault();
+    });
+  });
+
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && modal.classList.contains("is-visible")) {
       close();
+      return;
     }
-  });
+    if (!isProtectedViewOpen(modal)) return;
+    const key = event.key.toLowerCase();
+    const mod = event.ctrlKey || event.metaKey;
+    // Save, print, view-source, select-all/copy while viewing a policy.
+    if ((mod && ["s", "p", "u", "a", "c"].includes(key)) || key === "printscreen") {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
 
   return modal;
 };

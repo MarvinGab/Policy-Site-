@@ -1045,6 +1045,116 @@ body[data-page="policies"] .rail-search-field {
   pointer-events: none;
 }
 
+/* View-only viewer (employees): pages are server-rendered images or
+   converted HTML. Nothing in here can be selected, dragged or printed, and a
+   watermark with the viewer's identity sits above the scrolling content. */
+.viewer-pages {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.viewer-pages[hidden] {
+  display: none;
+}
+
+.viewer-pages-content {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  background: var(--panel);
+}
+
+.viewer-page {
+  display: block;
+  width: 100%;
+  max-width: 900px;
+  aspect-ratio: 1 / 1.294;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.viewer-page.is-loaded {
+  aspect-ratio: auto;
+  height: auto;
+}
+
+.viewer-doc {
+  width: 100%;
+  max-width: 820px;
+  padding: 40px 48px;
+  background: #fff;
+  color: #1a1a1a;
+  line-height: 1.6;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
+}
+
+.viewer-doc img {
+  max-width: 100%;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.viewer-doc table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.viewer-doc td,
+.viewer-doc th {
+  border: 1px solid #d0d0d0;
+  padding: 6px 8px;
+}
+
+.viewer-doc--text {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0;
+}
+
+.viewer-watermark {
+  position: absolute;
+  inset: -50%;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: space-around;
+  justify-content: space-around;
+  gap: 90px 70px;
+  transform: rotate(-30deg);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.viewer-watermark span {
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgba(0, 0, 0, 0.11);
+}
+
+@media print {
+  body.is-viewing-protected * {
+    display: none !important;
+  }
+
+  body.is-viewing-protected::after {
+    content: "This policy is view-only and cannot be printed.";
+    display: block;
+    padding: 40px;
+    font: 16px sans-serif;
+  }
+}
+
 
 /* ── Touch layout ──────────────────────────────────────────────────────────
    There is no hover on touch, so below this width the flyout becomes an
